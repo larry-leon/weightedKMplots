@@ -1,0 +1,311 @@
+#' Format p-value for display
+#' @param pval Numeric p-value.
+#' @param eps Threshold for small p-values.
+#' @param digits Number of digits to display.
+#' @return Formatted p-value as character.
+#' @export
+format_pval <- function(pval, eps = 0.001, digits = 3) {
+  if (is.na(pval)) return(NA)
+  if (pval < eps) return(paste0("<", eps))
+  format(round(pval, digits), nsmall = digits)
+}
+
+#' Validate required columns in a data frame
+#' @param df Data frame to check.
+#' @param required_cols Character vector of required column names.
+#' @return NULL if all columns present, otherwise error.
+#' @export
+validate_input <- function(df, required_cols) {
+  missing <- setdiff(required_cols, names(df))
+  if (length(missing) > 0) stop(paste("Missing required columns:", paste(missing, collapse = ", ")))
+  invisible(NULL)
+}
+
+
+# Weighted counting process: number of events up to time x
+#' Weighted counting process
+#' @param x Time point.
+#' @param y Vector of event/censoring times.
+#' @param w Weights (default 1).
+#' @return Weighted count of events up to time x.
+#' @export
+count_weighted <- function(x, y, w = rep(1, length(y))) {
+  sum(w * (y <= x))
+}
+
+# Weighted risk set: number at risk at time x
+#' Weighted risk set
+#' @param x Time point.
+#' @param y Vector of event/censoring times.
+#' @param w Weights (default 1).
+#' @return Weighted number at risk at time x.
+#' @export
+risk_weighted <- function(x, y, w = rep(1, length(y))) {
+  sum(w * (y >= x))
+}
+
+#' Kaplan-Meier quantile calculation
+#' @param time_points Vector of time points.
+#' @param survival_probs Vector of survival probabilities.
+#' @param qprob Quantile probability (default 0.5).
+#' @param type Calculation type (midpoint or min).
+#' @return Estimated quantile time.
+#' @export
+kmq_calculations <- function(time_points, survival_probs, qprob = 0.5, type = "midpoint") {
+  tq2 <- suppressWarnings(min(time_points[which(survival_probs <= qprob)]))
+  loc.tq2 <- which(time_points == tq2)
+  # jump point prior to quant
+  qjt1 <- suppressWarnings(min(survival_probs[survival_probs > qprob]))
+  tq1 <- suppressWarnings(min(time_points[which(survival_probs == qjt1)]))
+  tq.hat <- tq2
+  mid_flag <- !is.na(qjt1) && (round(qjt1, 6) == qprob)
+  if (type == "midpoint" && mid_flag) {
+    tq.hat <- tq1 + (tq2 - tq1) / 2
+  }
+  if (is.infinite(tq.hat) || is.na(tq.hat)) tq.hat <- NA
+  return(tq.hat)
+}
+
+#' Kaplan-Meier quantile and confidence interval
+#' @param time_points Vector of time points.
+#' @param survival_probs Vector of survival probabilities.
+#' @param se_probs Standard errors of survival probabilities.
+#' @param qprob Quantile probability (default 0.5).
+#' @param type Calculation type (midpoint or min).
+#' @param conf_level Confidence level (default 0.95).
+#' @return List with quantile and confidence interval.
+#' @export
+km_quantile <- function(time_points, survival_probs, se_probs = NULL, qprob = 0.5, type = c("midpoint","min"), conf_level = 0.95) {
+  type <- match.arg(type)
+  z <- qnorm(1 - (1 - conf_level) / 2)
+  qhat <- kmq_calculations(time_points = time_points, survival_probs = survival_probs, qprob = qprob, type = type)
+  qhat[is.infinite(qhat)] <- NA
+  qhat_lower <- qhat_upper <- NA
+  if (!is.null(se_probs)) {
+    # log transform for CI
+    lower_probs <- exp(log(survival_probs) - z * se_probs / survival_probs)
+    upper_probs <- exp(log(survival_probs) + z * se_probs / survival_probs)
+    qhat_lower <- kmq_calculations(time_points = time_points, survival_probs = lower_probs, qprob = qprob, type = type)
+    qhat_lower[is.infinite(qhat_lower)] <- NA
+    qhat_upper <- kmq_calculations(time_points = time_points, survival_probs = upper_probs, qprob = qprob, type = type)
+    qhat_upper[is.infinite(qhat_upper)] <- NA
+  }
+  return(list(qhat = qhat, lower = qhat_lower, upper = qhat_upper))
+}
+
+#' Table of KM quantiles for two groups
+#' @param time_points Vector of time points.
+#' @param surv0 Survival probabilities for group 0.
+#' @param se0 Standard errors for group 0.
+#' @param surv1 Survival probabilities for group 1.
+#' @param se1 Standard errors for group 1.
+#' @param arms Group labels.
+#' @param qprob Quantile probability.
+#' @param type Calculation type.
+#' @param conf_level Confidence level.
+#' @return Data frame of quantiles and CIs for each group.
+#' @export
+km_quantile_table <- function(time_points, surv0, se0, surv1, se1, arms = c("treat", "control"), qprob = 0.5, type = c("midpoint","min"), conf_level = 0.95) {
+  type <- match.arg(type)
+  kmq0 <- km_quantile(time_points = time_points, survival_probs = surv0, se_probs = se0, qprob = qprob, type = type, conf_level = conf_level)
+  df0 <- data.frame(group = arms[2], quantile = kmq0$qhat, lower = kmq0$lower, upper = kmq0$upper)
+  kmq1 <- km_quantile(time_points = time_points, survival_probs = surv1, se_probs = se1, qprob = qprob, type = type, conf_level = conf_level)
+  df1 <- data.frame(group = arms[1], quantile = kmq1$qhat, lower = kmq1$lower, upper = kmq1$upper)
+  quantiles_df <- rbind(df1, df0)
+  return(quantiles_df)
+}
+
+#' Kaplan-Meier estimates and Greenwood variance
+#' @param ybar Number at risk at each time.
+#' @param nbar Number of events at each time.
+#' @return List with survival and variance estimates.
+#' @export
+KM_estimates <- function(ybar, nbar) {
+  dN <- diff(c(0, nbar))
+  dN_risk <- ifelse(ybar > 0, dN / ybar, 0.0)
+  S_KM <- cumprod(1 - dN_risk)
+  aa <- dN
+  bb <- ybar * (ybar - dN)
+  var_KM <- (S_KM^2) * cumsum(ifelse(ybar > 0, aa / bb, 0.0))
+  list(S_KM = S_KM, sig2_KM = var_KM)
+}
+
+#' Weighted log-rank estimates and variance
+#' @param ybar0 Number at risk in group 0.
+#' @param ybar1 Number at risk in group 1.
+#' @param nbar0 Number of events in group 0.
+#' @param nbar1 Number of events in group 1.
+#' @param rho Weighting parameter.
+#' @param gamma Weighting parameter.
+#' @return List with log-rank statistic and variance.
+#' @export
+wlr_estimates <- function(ybar0, ybar1, nbar0, nbar1, rho = 0, gamma = 0) {
+  dN_z0 <- diff(c(0, nbar0))
+  dN_z1 <- diff(c(0, nbar1))
+  dN_pooled <- dN_z0 + dN_z1
+  risk_z1 <- ybar1
+  risk_z0 <- ybar0
+  risk_pooled <- risk_z0 + risk_z1
+  dN_Risk <- ifelse(risk_pooled > 0, dN_pooled / risk_pooled, 0)
+  S_pool <- cumprod(1 - dN_Risk)
+  S_pool <- c(1, S_pool[-length(S_pool)]) # S_pool(t-)
+  w <- (S_pool^rho) * ((1 - S_pool)^gamma)
+  K <- ifelse(risk_pooled > 0, w * (risk_z0 * risk_z1) / risk_pooled, 0.0)
+  term0 <- sum(ifelse(risk_z0 > 0, (K / risk_z0) * dN_z0, 0.0))
+  term1 <- sum(ifelse(risk_z1 > 0, (K / risk_z1) * dN_z1, 0.0))
+  lr <- term1 - term0
+  h0 <- ifelse(risk_z0 == 0, 0, (K^2 / risk_z0))
+  h1 <- ifelse(risk_z1 == 0, 0, (K^2 / risk_z1))
+  dJ <- ifelse(risk_pooled == 1, 0, (dN_pooled - 1) / (risk_pooled - 1))
+  dL <- ifelse(risk_pooled == 0, 0, dN_pooled / risk_pooled)
+  sig2 <- sum((h0 + h1) * (1 - dJ) * dL)
+  list(lr = lr, sig2 = sig2)
+}
+
+#' Weighted log-rank and KM difference at tzero
+#' @param dfcounting Data frame with counting process columns.
+#' @param rho Weighting parameter.
+#' @param gamma Weighting parameter.
+#' @param tzero Time point for difference.
+#' @return List with statistics, variances, covariance, and correlation.
+#' @export
+wlr_dhat_estimates <- function(dfcounting, rho = 0, gamma = 0, tzero = 24) {
+  at_points <- dfcounting$at.points
+  nbar0 <- dfcounting$nbar0
+  nbar1 <- dfcounting$nbar1
+  ybar0 <- dfcounting$ybar0
+  ybar1 <- dfcounting$ybar1
+  S1 <- dfcounting$surv1
+  S0 <- dfcounting$surv0
+  Spool <- dfcounting$survP
+  loc_tzero <- which.max(at_points > tzero)
+  if (at_points[loc_tzero] <= tzero & at_points[loc_tzero + 1] > tzero) {
+    dhat_tzero <- S1[loc_tzero] - S0[loc_tzero]
+  } else {
+    dhat_tzero <- S1[loc_tzero - 1] - S0[loc_tzero - 1]
+  }
+  Sp_tzero <- Spool[loc_tzero]
+  dN_z0 <- diff(c(0, nbar0))
+  dN_z1 <- diff(c(0, nbar1))
+  dN_pooled <- dN_z0 + dN_z1
+  risk_z1 <- ybar1
+  risk_z0 <- ybar0
+  risk_pooled <- risk_z0 + risk_z1
+  S_pool <- Spool
+  S_pool <- c(1, S_pool[-length(S_pool)])
+  w <- (S_pool^rho) * ((1 - S_pool)^gamma)
+  K <- ifelse(risk_pooled > 0, w * (risk_z0 * risk_z1) / risk_pooled, 0.0)
+  term0 <- sum(ifelse(risk_z0 > 0, (K / risk_z0) * dN_z0, 0.0))
+  term1 <- sum(ifelse(risk_z1 > 0, (K / risk_z1) * dN_z1, 0.0))
+  lr <- term1 - term0
+  h0 <- ifelse(risk_z0 == 0, 0, (K^2 / risk_z0))
+  h1 <- ifelse(risk_z1 == 0, 0, (K^2 / risk_z1))
+  dJ <- ifelse(risk_pooled == 1, 0, (dN_pooled - 1) / (risk_pooled - 1))
+  dL <- ifelse(risk_pooled == 0, 0, dN_pooled / risk_pooled)
+  sig2_lr <- sum((h0 + h1) * (1 - dJ) * dL)
+  w_tzero <- w * ifelse(at_points <= tzero, 1, 0)
+  w_integral_t0 <- sum(w_tzero * (1 - dJ) * dL)
+  cov_wlr_dhat <- Sp_tzero * w_integral_t0
+  h2 <- ifelse(risk_z0 * risk_z1 > 0, (risk_pooled / (risk_z0 * risk_z1)), 0)
+  h2 <- h2 * ifelse(at_points <= tzero, 1, 0)
+  sig2_dhat <- (Sp_tzero^2) * sum(h2 * (1 - dJ) * dL)
+  cor_wlr_dhat <- cov_wlr_dhat / (sqrt(sig2_lr) * sqrt(sig2_dhat))
+  list(
+    lr = lr, sig2_lr = sig2_lr, dhat = dhat_tzero,
+    cov_wlr_dhat = cov_wlr_dhat, sig2_dhat = sig2_dhat, cor_wlr_dhat = cor_wlr_dhat
+  )
+}
+
+#' KM difference at specified timepoints
+#' @param df Data frame with survival data.
+#' @param tte.name Name of time-to-event column.
+#' @param event.name Name of event indicator column.
+#' @param treat.name Name of treatment group column.
+#' @param weight.name Name of weights column (optional).
+#' @param at.points Time points for estimates.
+#' @param alpha Significance level.
+#' @return List with survival, difference, and CI estimates.
+#' @export
+KM_diff <- function(df, tte.name, event.name, treat.name, weight.name=NULL, at.points = sort(df[[tte.name]]), alpha = 0.05) {
+  
+  tfixed <- aeqSurv(Surv(df[[tte.name]],df[[event.name]]))
+  time<- tfixed[,"time"]
+  delta <- tfixed[,"status"]
+  z <- df[[treat.name]]
+  wgt <- if (!is.null(weight.name)) df[[weight.name]] else rep(1, length(time))
+  
+  if (!all(z %in% c(0, 1))) stop("Treatment must be numerical indicator: 0=control, 1=experimental")
+  
+  if (is.unsorted(time)) {
+    ord <- order(time)
+    time <- time[ord]
+    delta <- delta[ord]
+    z <- z[ord]
+    wgt <- wgt[ord]
+  }
+  
+  U0 <- time[z == 0]
+  D0 <- delta[z == 0]
+  W0 <- wgt[z == 0]
+  
+  ybar0 <- colSums(outer(U0, at.points, FUN = ">=") * W0)
+  nbar0 <- colSums(outer(U0[D0 == 1], at.points, FUN = "<=") * W0[D0 == 1])
+  temp <- KM_estimates(ybar = ybar0, nbar = nbar0)
+  surv0 <- temp$S_KM
+  sig2_surv0 <- temp$sig2_KM
+  
+  U1 <- time[z == 1]
+  D1 <- delta[z == 1]
+  W1 <- wgt[z == 1]
+  
+  ybar1 <- colSums(outer(U1, at.points, FUN = ">=") * W1)
+  nbar1 <- colSums(outer(U1[D1 == 1], at.points, FUN = "<=") * W1[D1 == 1])
+  
+  temp <- KM_estimates(ybar = ybar1, nbar = nbar1)
+  surv1 <- temp$S_KM
+  sig2_surv1 <- temp$sig2_KM
+  dhat <- surv1 - surv0
+  sig2_dhat <- sig2_surv0 + sig2_surv1
+  c_alpha <- qnorm(1 - alpha / 2)
+  lower <- dhat - c_alpha * sqrt(sig2_dhat)
+  upper <- dhat + c_alpha * sqrt(sig2_dhat)
+  list(
+    at.points = at.points, surv0 = surv0, sig2_surv0 = sig2_surv0,
+    surv1 = surv1, sig2_surv1 = sig2_surv1, dhat = dhat, sig2_dhat = sig2_dhat,
+    lower = lower, upper = upper
+  )
+}
+
+#' Score test statistic for survival data
+#' @param nbar0 Number of events in group 0.
+#' @param ybar0 Number at risk in group 0.
+#' @param nbar1 Number of events in group 1.
+#' @param ybar1 Number at risk in group 1.
+#' @return List with z-score, score, and variance.
+#' @export
+z_score_calculations <- function(nbar0, ybar0, nbar1, ybar1){
+  # score test statistic
+  dN.z1 <- diff(c(0, nbar1))
+  dN.z0 <- diff(c(0, nbar0))
+  num <- ybar1 * ybar0
+  den <- ybar1 + ybar0
+  K <- ifelse(den > 0, num / den, 0.0)
+  term1 <- ifelse(den > 0, num / den, 0.0)
+  term2a <- ifelse(ybar1 > 0, dN.z1 / ybar1, 0.0)
+  term2b <- ifelse(ybar0 > 0, dN.z0 / ybar0, 0.0)
+  score <- sum(term1 * (term2b - term2a))
+  i.bhat <- sum(ifelse(den > 0, (num / (den^2)) * (dN.z0 + dN.z1), 0.0))
+  DNbar <- dN.z0 + dN.z1 
+  h1 <- ifelse(ybar1 > 0, (K^2 / ybar1), 0.0)
+  h2 <- ifelse(ybar0 > 0, (K^2 / ybar0), 0.0)
+  temp <- c(den - 1)
+  ybar_mod <- ifelse(temp < 1, 1, temp)
+  dH1 <- ifelse(ybar_mod > 0, (DNbar-1) / ybar_mod, 0.0)
+  dH2 <- ifelse(den > 0, DNbar / den, 0.0)
+  sig2s <- (h1+h2)*(1-dH1)*dH2
+  sig2U.bzero <- sum(sig2s)
+  z.score <- score / sqrt(sig2U.bzero)
+  return(list(z.score=z.score, score=score, sig2.score=sig2U.bzero))
+}
+
+
