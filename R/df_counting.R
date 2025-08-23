@@ -1,6 +1,6 @@
 
 # ---- Utility Functions ----
-#' Safe execution wrapper#'
+#' Safe execution wrapper
 #' @export
 safe_run <- function(expr) {
   tryCatch(expr, error = function(e) {
@@ -8,6 +8,58 @@ safe_run <- function(expr) {
     NULL
   })
 }
+
+
+#' Get df_counting
+#' @export
+get_dfcounting <- function(df, tte.name, event.name, treat.name, arms, by.risk=12, cox.digits=3, lr.digits=3, qprob=0.50, strata.name=NULL, weight.name=NULL, check.KM=TRUE) {
+  safe_run({
+    dfcount <- df_counting(
+      df=df, tte.name=tte.name, event.name=event.name, treat.name=treat.name,
+      arms=arms, by.risk=by.risk, cox.digits=cox.digits, lr.digits=lr.digits,
+      qprob=qprob, strata.name=strata.name, weight.name=weight.name, check.KM=check.KM
+    )
+    return(dfcount)
+  })
+}
+
+#' Checking results
+#' @export
+check_results <- function(dfcount){
+  zlr_sq  <- with(dfcount,lr^2/sig2_lr)
+  zCox_sq <-  with(dfcount,z.score^2)
+  cat(sprintf("zlr_sq=%.6f, logrank=%.6f, zCox_sq=%.6f\n", zlr_sq, dfcount$logrank_results$chisq, zCox_sq))
+}
+
+
+#' Plot Kaplan-Meier curves
+#' @export
+plot_km <- function(df, tte.name, event.name, treat.name, weights=NULL, ...) {
+  safe_run({
+    surv_obj <- Surv(df[[tte.name]], df[[event.name]])
+    formula <- as.formula(paste("surv_obj ~", treat.name))
+    if (!is.null(weights)) {
+      km_fit <- survfit(formula, data=df, weights=df[[weights]])
+    } else {
+      km_fit <- survfit(formula, data=df)
+    }
+    plot(km_fit, mark.time=TRUE, ...)
+    invisible(km_fit)
+  })
+}
+
+#' Plot weighted KM using custom function
+#' @export
+plot_weighted_km <- function(dfcount, ...) {
+  safe_run({
+    KM_plot_2sample_weighted_counting(
+      dfcount=dfcount, risk.cex=0.725, risk_offset=0.125, risk_delta=0.05,
+      show.cox=TRUE, show.logrank=FALSE, show.med=TRUE, med.font=4, ...
+    )
+  })
+}
+
+
 # Get df_counting
 #' @export
 get_dfcounting <- function(df, tte.name, event.name, treat.name, arms, by.risk=12, cox.digits=3, lr.digits=3, qprob=0.50, strata.name=NULL, weight.name=NULL, check.KM=TRUE) {
