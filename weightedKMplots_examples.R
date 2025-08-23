@@ -31,8 +31,6 @@ get_dfcounting <- function(df, tte.name, event.name, treat.name, arms, by.risk=1
 check_results <- function(dfcount){
   zlr_sq  <- with(dfcount,lr^2/sig2_lr)
   zCox_sq <-  with(dfcount,z.score^2)
-  #cox_score <-  dfcount$cox_results$score
-  #cat(sprintf("zlr_sq=%.3f, logrank=%.3f, zCox_sq=%.3f\n, score=%.3f\n", zlr_sq, dfcount$logrank_results$chisq, zCox_sq, cox_score))
   cat(sprintf("zlr_sq=%.6f, logrank=%.6f, zCox_sq=%.6f\n", zlr_sq, dfcount$logrank_results$chisq, zCox_sq))
 }
 

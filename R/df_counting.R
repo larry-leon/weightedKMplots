@@ -1,4 +1,15 @@
 
+# ---- Utility Functions ----
+#' Safe execution wrapper#'
+#' @export
+safe_run <- function(expr) {
+  tryCatch(expr, error = function(e) {
+    message("Error: ", e$message)
+    NULL
+  })
+}
+
+
 #' Creates counting process dataset
 #' @export
 df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, strata.name = NULL, arms=c("treat","control"), time.zero=0, tpoints.add=c(0),
