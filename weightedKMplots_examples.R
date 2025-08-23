@@ -2,7 +2,7 @@
 
 library(survival)
 # survminer is only used for 1 plot comparison
-library(survminer)
+#library(survminer)
 
 library(weightedKMplots)
 
@@ -52,9 +52,9 @@ dfcount_mod <- get_dfcounting(df=df_mod, tte.name=tte.name, event.name=event.nam
 check_results(dfcount_mod)
 
 # Compare with survminer
-km_fit_mod <- survfit(Surv(time_months,status) ~ hormon, data=df_mod)
-ggsurvplot(km_fit_mod,conf.int=FALSE,risk.table = TRUE, break.time.by=12, xlim=c(0,86),
-           tables.height = 0.2,tables.theme = theme_cleantable(),censor=TRUE)
+# km_fit_mod <- survfit(Surv(time_months,status) ~ hormon, data=df_mod)
+# ggsurvplot(km_fit_mod,conf.int=FALSE,risk.table = TRUE, break.time.by=12, xlim=c(0,86),
+#            tables.height = 0.2,tables.theme = theme_cleantable(),censor=TRUE)
 
 
 
