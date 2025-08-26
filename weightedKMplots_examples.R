@@ -19,7 +19,8 @@ arms <- c("treat", "control")
 # ---- Main Analyses ----
 
 # 1. GBSG - ITT Analysis
-dfcount_gbsg <- get_dfcounting(df=df_gbsg, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms)
+dfcount_gbsg <- df_counting(df=df_gbsg, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms)
+
 # check log-rank statistics
 check_results(dfcount_gbsg)
 
