@@ -66,7 +66,7 @@ plot_weighted_km <- function(dfcount, ...) {
 #' @export
 df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, strata.name = NULL, arms=c("treat","control"), time.zero=0, tpoints.add=c(0),
                         by.risk=6, time.zero.label = 0.0, risk.add=NULL, get.cox=TRUE, cox.digits=2, lr.digits=2, cox.eps = 0.001, lr.eps = 0.001,
-                        qprob=0.5, conf_level = 0.95, check.KM=TRUE,stop.onerror=FALSE,censoring_allmarks=TRUE) {
+                        qprob=0.5, rho = 0, gamma = 0, conf_level = 0.95, check.KM=TRUE,stop.onerror=FALSE,censoring_allmarks=TRUE) {
 
   validate_input(df, c(tte.name, event.name, treat.name, weight.name))
 
@@ -209,9 +209,10 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
   temp <- KM_estimates(ybar = ybar0 + ybar1, nbar = nbar0 + nbar1)
   survP <- temp$S_KM
   sig2_survP <- temp$sig2_KM
-  get_lr <- wlr_estimates(ybar0 = ybar0, ybar1 = ybar1, nbar0 = nbar0, nbar1 = nbar1, rho = 0, gamma = 0)
+  get_lr <- wlr_estimates(ybar0 = ybar0, ybar1 = ybar1, nbar0 = nbar0, nbar1 = nbar1, rho = rho, gamma = gamma)
   # Quantiles
-  get_kmq <- km_quantile_table(at_points, surv0, se0=sqrt(sig2_surv0), surv1, se1=sqrt(sig2_surv1), arms, qprob = qprob, type = c("midpoint"), conf_level = conf_level)
+  get_kmq <- km_quantile_table(at_points, surv0, se0=sqrt(sig2_surv0), surv1, se1=sqrt(sig2_surv1), arms,
+                               qprob = qprob, type = c("midpoint"), conf_level = conf_level)
   ans$quantile_results <- get_kmq
 
   get_score <- z_score_calculations(nbar0,ybar0,nbar1,ybar1)
@@ -285,7 +286,7 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
     check_km_curve(surv1[idv1.check], df1_check, "Group 1")
     check_km_curve(surv0[idv0.check], df0_check, "Group 0")
   }
-
+  ans$get_lr <- get_lr
   ans$lr <- get_lr$lr
   ans$sig2_lr <- get_lr$sig2
   ans$at.points <- at_points
