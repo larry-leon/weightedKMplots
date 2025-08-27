@@ -139,21 +139,27 @@ KM_estimates <- function(ybar, nbar) {
 #' @param gamma Weighting parameter.
 #' @return List with log-rank statistic and variance.
 #' @export
-wlr_estimates <- function(ybar0, ybar1, nbar0, nbar1, rho = 0, gamma = 0) {
+wlr_estimates <- function(ybar0, ybar1, nbar0, nbar1, S_pool = NULL, rho = 0, gamma = 0) {
   dN_z0 <- diff(c(0, nbar0))
   dN_z1 <- diff(c(0, nbar1))
   dN_pooled <- dN_z0 + dN_z1
   risk_z1 <- ybar1
   risk_z0 <- ybar0
   risk_pooled <- risk_z0 + risk_z1
+  w <- rep(1, length(ybar0))
+  if( rho != 0.0 | gamma != 0.0){
+  if(is.null(S_pool)){
   dN_Risk <- ifelse(risk_pooled > 0, dN_pooled / risk_pooled, 0)
   S_pool <- cumprod(1 - dN_Risk)
   S_pool <- c(1, S_pool[-length(S_pool)]) # S_pool(t-)
+  }
+  if(!is.null(S_pool))  S_pool <- c(1, S_pool[-length(S_pool)])
   w <- (S_pool^rho) * ((1 - S_pool)^gamma)
+  }
   K <- ifelse(risk_pooled > 0, w * (risk_z0 * risk_z1) / risk_pooled, 0.0)
-  term0 <- sum(ifelse(risk_z0 > 0, (K / risk_z0) * dN_z0, 0.0))
-  term1 <- sum(ifelse(risk_z1 > 0, (K / risk_z1) * dN_z1, 0.0))
-  lr <- term1 - term0
+  drisk0 <- sum(ifelse(risk_z0 > 0, (K / risk_z0) * dN_z0, 0.0))
+  drisk1 <- sum(ifelse(risk_z1 > 0, (K / risk_z1) * dN_z1, 0.0))
+  lr <- drisk0 - drisk1
   h0 <- ifelse(risk_z0 == 0, 0, (K^2 / risk_z0))
   h1 <- ifelse(risk_z1 == 0, 0, (K^2 / risk_z1))
   dJ <- ifelse(risk_pooled == 1, 0, (dN_pooled - 1) / (risk_pooled - 1))
@@ -177,27 +183,26 @@ wlr_dhat_estimates <- function(dfcounting, rho = 0, gamma = 0, tzero = 24) {
   ybar1 <- dfcounting$ybar1
   S1 <- dfcounting$surv1
   S0 <- dfcounting$surv0
-  Spool <- dfcounting$survP
+  S_pool <- dfcounting$survP
   loc_tzero <- which.max(at_points > tzero)
   if (at_points[loc_tzero] <= tzero & at_points[loc_tzero + 1] > tzero) {
     dhat_tzero <- S1[loc_tzero] - S0[loc_tzero]
   } else {
     dhat_tzero <- S1[loc_tzero - 1] - S0[loc_tzero - 1]
   }
-  Sp_tzero <- Spool[loc_tzero]
+  Sp_tzero <- S_pool[loc_tzero]
   dN_z0 <- diff(c(0, nbar0))
   dN_z1 <- diff(c(0, nbar1))
   dN_pooled <- dN_z0 + dN_z1
   risk_z1 <- ybar1
   risk_z0 <- ybar0
   risk_pooled <- risk_z0 + risk_z1
-  S_pool <- Spool
   S_pool <- c(1, S_pool[-length(S_pool)])
   w <- (S_pool^rho) * ((1 - S_pool)^gamma)
   K <- ifelse(risk_pooled > 0, w * (risk_z0 * risk_z1) / risk_pooled, 0.0)
-  term0 <- sum(ifelse(risk_z0 > 0, (K / risk_z0) * dN_z0, 0.0))
-  term1 <- sum(ifelse(risk_z1 > 0, (K / risk_z1) * dN_z1, 0.0))
-  lr <- term1 - term0
+  drisk0 <- sum(ifelse(risk_z0 > 0, (K / risk_z0) * dN_z0, 0.0))
+  drisk1 <- sum(ifelse(risk_z1 > 0, (K / risk_z1) * dN_z1, 0.0))
+  lr <- drisk0 - drisk1
   h0 <- ifelse(risk_z0 == 0, 0, (K^2 / risk_z0))
   h1 <- ifelse(risk_z1 == 0, 0, (K^2 / risk_z1))
   dJ <- ifelse(risk_pooled == 1, 0, (dN_pooled - 1) / (risk_pooled - 1))
@@ -227,15 +232,15 @@ wlr_dhat_estimates <- function(dfcounting, rho = 0, gamma = 0, tzero = 24) {
 #' @return List with survival, difference, and CI estimates.
 #' @export
 KM_diff <- function(df, tte.name, event.name, treat.name, weight.name=NULL, at.points = sort(df[[tte.name]]), alpha = 0.05) {
-  
+
   tfixed <- aeqSurv(Surv(df[[tte.name]],df[[event.name]]))
   time<- tfixed[,"time"]
   delta <- tfixed[,"status"]
   z <- df[[treat.name]]
   wgt <- if (!is.null(weight.name)) df[[weight.name]] else rep(1, length(time))
-  
+
   if (!all(z %in% c(0, 1))) stop("Treatment must be numerical indicator: 0=control, 1=experimental")
-  
+
   if (is.unsorted(time)) {
     ord <- order(time)
     time <- time[ord]
@@ -243,24 +248,24 @@ KM_diff <- function(df, tte.name, event.name, treat.name, weight.name=NULL, at.p
     z <- z[ord]
     wgt <- wgt[ord]
   }
-  
+
   U0 <- time[z == 0]
   D0 <- delta[z == 0]
   W0 <- wgt[z == 0]
-  
+
   ybar0 <- colSums(outer(U0, at.points, FUN = ">=") * W0)
   nbar0 <- colSums(outer(U0[D0 == 1], at.points, FUN = "<=") * W0[D0 == 1])
   temp <- KM_estimates(ybar = ybar0, nbar = nbar0)
   surv0 <- temp$S_KM
   sig2_surv0 <- temp$sig2_KM
-  
+
   U1 <- time[z == 1]
   D1 <- delta[z == 1]
   W1 <- wgt[z == 1]
-  
+
   ybar1 <- colSums(outer(U1, at.points, FUN = ">=") * W1)
   nbar1 <- colSums(outer(U1[D1 == 1], at.points, FUN = "<=") * W1[D1 == 1])
-  
+
   temp <- KM_estimates(ybar = ybar1, nbar = nbar1)
   surv1 <- temp$S_KM
   sig2_surv1 <- temp$sig2_KM
@@ -283,19 +288,30 @@ KM_diff <- function(df, tte.name, event.name, treat.name, weight.name=NULL, at.p
 #' @param ybar1 Number at risk in group 1.
 #' @return List with z-score, score, and variance.
 #' @export
-z_score_calculations <- function(nbar0, ybar0, nbar1, ybar1){
+z_score_calculations <- function(nbar0, ybar0, nbar1, ybar1, rho = 0, gamma = 0, S_pool = NULL){
+
+w <- rep(1, length(nbar0))
+if( rho != 0.0 | gamma != 0.0){
+  if(is.null(S_pool)){
+    dN_Risk <- ifelse(risk_pooled > 0, dN_pooled / risk_pooled, 0)
+    S_pool <- cumprod(1 - dN_Risk)
+    S_pool <- c(1, S_pool[-length(S_pool)]) # S_pool(t-)
+  }
+ if(!is.null(S_pool)) S_pool <- c(1, S_pool[-length(S_pool)])
+ w <- (S_pool^rho) * ((1 - S_pool)^gamma)
+}
+
   # score test statistic
   dN.z1 <- diff(c(0, nbar1))
   dN.z0 <- diff(c(0, nbar0))
-  num <- ybar1 * ybar0
+  num <- w * ybar1 * ybar0
   den <- ybar1 + ybar0
   K <- ifelse(den > 0, num / den, 0.0)
-  term1 <- ifelse(den > 0, num / den, 0.0)
-  term2a <- ifelse(ybar1 > 0, dN.z1 / ybar1, 0.0)
-  term2b <- ifelse(ybar0 > 0, dN.z0 / ybar0, 0.0)
-  score <- sum(term1 * (term2b - term2a))
+  drisk1 <- ifelse(ybar1 > 0, dN.z1 / ybar1, 0.0)
+  drisk0 <- ifelse(ybar0 > 0, dN.z0 / ybar0, 0.0)
+  score <- sum(K * (drisk0 - drisk1))
   i.bhat <- sum(ifelse(den > 0, (num / (den^2)) * (dN.z0 + dN.z1), 0.0))
-  DNbar <- dN.z0 + dN.z1 
+  DNbar <- dN.z0 + dN.z1
   h1 <- ifelse(ybar1 > 0, (K^2 / ybar1), 0.0)
   h2 <- ifelse(ybar0 > 0, (K^2 / ybar0), 0.0)
   temp <- c(den - 1)

@@ -210,13 +210,13 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
   temp <- KM_estimates(ybar = ybar0 + ybar1, nbar = nbar0 + nbar1)
   survP <- temp$S_KM
   sig2_survP <- temp$sig2_KM
-  get_lr <- wlr_estimates(ybar0 = ybar0, ybar1 = ybar1, nbar0 = nbar0, nbar1 = nbar1, rho = rho, gamma = gamma)
+  get_lr <- wlr_estimates(ybar0 = ybar0, ybar1 = ybar1, nbar0 = nbar0, nbar1 = nbar1, rho = rho, gamma = gamma, S_pool = survP)
   # Quantiles
   get_kmq <- km_quantile_table(at_points, surv0, se0=sqrt(sig2_surv0), surv1, se1=sqrt(sig2_surv1), arms,
                                qprob = qprob, type = c("midpoint"), conf_level = conf_level)
   ans$quantile_results <- get_kmq
 
-  get_score <- z_score_calculations(nbar0,ybar0,nbar1,ybar1)
+  get_score <- z_score_calculations(nbar0,ybar0,nbar1,ybar1,rho = rho,gamma = gamma, S_pool = survP)
   ans$z.score <- get_score$z.score
 
   # KM curve checks
@@ -287,7 +287,6 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
     check_km_curve(surv1[idv1.check], df1_check, "Group 1")
     check_km_curve(surv0[idv0.check], df0_check, "Group 0")
   }
-  ans$get_lr <- get_lr
   ans$lr <- get_lr$lr
   ans$sig2_lr <- get_lr$sig2
   ans$at.points <- at_points
@@ -334,27 +333,31 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
       ybar1_s <- colSums(outer(U1_s, at_points, FUN = ">=") * W1_s)
       nbar1_s <- colSums(outer(U1_s[D1_s == 1], at_points, FUN = "<=") * W1_s[D1_s == 1])
 
-      get_score <- z_score_calculations(nbar0 = nbar0_s,ybar0 = ybar0_s,nbar1 = nbar1_s, ybar1 = ybar1_s)
-      score_stratified <- score_stratified + get_score$score
-      sig2_score_stratified <- sig2_score_stratified + get_score$sig2.score
-
-      ybar0_mat[, ss] <- ybar0_s
-      nbar0_mat[, ss] <- nbar0_s
-      ybar1_mat[, ss] <- ybar1_s
-      nbar1_mat[, ss] <- nbar1_s
       temp <- KM_estimates(ybar = ybar0_s, nbar = nbar0_s)
       surv0_mat[, ss] <- temp$S_KM
       sig2_surv0_mat[, ss] <- temp$sig2_KM
       temp <- KM_estimates(ybar = ybar1_s, nbar = nbar1_s)
       surv1_mat[, ss] <- temp$S_KM
       sig2_surv1_mat[, ss] <- temp$sig2_KM
+
+
       temp <- KM_estimates(ybar = ybar0_s + ybar1_s, nbar = nbar0_s + nbar1_s)
       survP_mat[, ss] <- temp$S_KM
       sig2_survP_mat[, ss] <- temp$sig2_KM
-      temp <- wlr_estimates(ybar0 = ybar0_s, ybar1 = ybar1_s, nbar0 = nbar0_s, nbar1 = nbar1_s, rho = 0, gamma = 0)
+
+      get_score <- z_score_calculations(nbar0 = nbar0_s,ybar0 = ybar0_s,nbar1 = nbar1_s, ybar1 = ybar1_s, rho = rho, gamma = gamma, S_pool = temp$S_KM, rho = rho, gamma = gamma)
+      score_stratified <- score_stratified + get_score$score
+      sig2_score_stratified <- sig2_score_stratified + get_score$sig2.score
+
+      temp <- wlr_estimates(ybar0 = ybar0_s, ybar1 = ybar1_s, nbar0 = nbar0_s, nbar1 = nbar1_s, rho = rho, gamma = gamma, S_pool = temp$S_KM, rho = rho, gamma = gamma)
       lr_stratified <- lr_stratified + temp$lr
       sig2_lr_stratified <- sig2_lr_stratified + temp$sig2
-    }
+
+      ybar0_mat[, ss] <- ybar0_s
+      nbar0_mat[, ss] <- nbar0_s
+      ybar1_mat[, ss] <- ybar1_s
+      nbar1_mat[, ss] <- nbar1_s
+ }
 
     # For each observation, get the index of its time in at_points
     id_time <- match(time, at_points)  # 'time' is the vector of observed times
