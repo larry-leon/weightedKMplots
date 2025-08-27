@@ -114,7 +114,7 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
     logrank_formula <- as.formula(paste0("surv_obj ~ group + strata(strata_var)"))
     logrank_fit <- eval(bquote(survival::survdiff(.(logrank_formula))))
   } else {
-    logrank_fit <- survival::survdiff(surv_obj ~ group)
+    logrank_fit <- survival::survdiff(surv_obj ~ group, rho = rho)
   }
 
   chisq <- logrank_fit$chisq
@@ -151,6 +151,7 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
   risk.points <- sort(unique(c(seq(time.zero.label, max(time), by = ifelse(is.null(by.risk), 1, by.risk)), risk.add)))
   ans$risk.points <- risk.points
   ans$risk.points.label <- as.character(c(time.zero.label, risk.points[-1]))
+
   at_points <- sort(unique(c(time, time.zero, tpoints.add, risk.points)))
 
   U0 <- time[z == 0]
@@ -377,7 +378,8 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
 
     }
 
-  if(is.null(weight.name) && is.null(strata.name)){
+  # Compare with survdiff for gamma=0 (survdiff only handles gamma=0)
+  if(is.null(weight.name) && is.null(strata.name) && gamma == 0){
     z_lr <- with(get_lr,lr/sqrt(sig2))
     zsq_lr_check <- logrank_results$chisq
     if(round(z_lr^2 - zsq_lr_check,8)>0){
@@ -386,7 +388,7 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
     }
   }
 
-  if(is.null(weight.name) && !is.null(strata.name)){
+  if(is.null(weight.name) && !is.null(strata.name) && gamma == 0){
     z_lr <- lr_stratified/sqrt(sig2_lr_stratified)
     zsq_lr_check <- logrank_results$chisq
     if(round(z_lr^2 - zsq_lr_check,8)>0){
