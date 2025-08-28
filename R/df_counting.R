@@ -81,7 +81,7 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
     }
     cox_formula <- as.formula(paste0("survival::Surv(", tte.name, ",", event.name, ") ~ ", treat.name.strata))
     if (!is.null(weight.name)) {
-      cox_fit <- survival::coxph(cox_formula, data = df, weights = df[[weight.name]],robust=TRUE)
+      cox_fit <- survival::coxph(cox_formula, data = df, weights = df[[weight.name]],robust = TRUE)
     } else {
       cox_fit <- survival::coxph(cox_formula, data = df, robust=TRUE)
     }
