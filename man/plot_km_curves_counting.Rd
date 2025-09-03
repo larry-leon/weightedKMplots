@@ -2,7 +2,7 @@
 % Please edit documentation in R/kmplotting_helpers.R
 \name{plot_km_curves_counting}
 \alias{plot_km_curves_counting}
-\title{KM plotting helper}
+\title{Plot KM curves for two groups with optional confidence intervals and censoring marks}
 \usage{
 plot_km_curves_counting(
   at.points,
@@ -25,14 +25,69 @@ plot_km_curves_counting(
   risk.points,
   risk.points.label,
   cens1 = NULL,
-  S0.KM.full = NULL,
-  S1.KM.full = NULL,
+  se0.KM = NULL,
+  se1.KM = NULL,
+  conf.int = FALSE,
+  conf_level = 0.95,
   censor.cex = 1,
   time.zero = 0,
   tpoints.add = c(0),
   ...
 )
 }
+\arguments{
+\item{at.points}{Time points for plotting}
+
+\item{S0.KM}{Survival probabilities for group 0}
+
+\item{idx0}{Indices for censoring in group 0}
+
+\item{idv0}{Indices for events in group 0}
+
+\item{S1.KM}{Survival probabilities for group 1}
+
+\item{idx1}{Indices for censoring in group 1}
+
+\item{idv1}{Indices for events in group 1}
+
+\item{col.0}{Color for group 0}
+
+\item{col.1}{Color for group 1}
+
+\item{ltys}{Line types for groups}
+
+\item{lwds}{Line widths for groups}
+
+\item{Xlab}{X-axis label}
+
+\item{Ylab}{Y-axis label}
+
+\item{ylim}{Y-axis limits}
+
+\item{xlim}{X-axis limits}
+
+\item{show.ticks}{Show censoring marks (default FALSE)}
+
+\item{cens0}{Censoring times for group 0}
+
+\item{risk.points}{Risk time points}
+
+\item{risk.points.label}{Labels for risk time points}
+
+\item{cens1}{Censoring times for group 1}
+
+\item{se0.KM}{Standard errors for group 0}
+
+\item{se1.KM}{Standard errors for group 1}
+
+\item{conf.int}{Show confidence intervals (default FALSE)}
+
+\item{conf_level}{Confidence level (default 0.95)}
+
+\item{censor.cex}{Censoring mark size (default 1.0)}
+
+\item{...}{Additional arguments to plot}
+}
 \description{
-KM plotting helper
+Plot KM curves for two groups with optional confidence intervals and censoring marks
 }

@@ -4,7 +4,15 @@
 \alias{z_score_calculations}
 \title{Score test statistic for survival data}
 \usage{
-z_score_calculations(nbar0, ybar0, nbar1, ybar1)
+z_score_calculations(
+  nbar0,
+  ybar0,
+  nbar1,
+  ybar1,
+  rho = 0,
+  gamma = 0,
+  S_pool = NULL
+)
 }
 \arguments{
 \item{nbar0}{Number of events in group 0.}

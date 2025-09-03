@@ -4,7 +4,7 @@
 \alias{wlr_estimates}
 \title{Weighted log-rank estimates and variance}
 \usage{
-wlr_estimates(ybar0, ybar1, nbar0, nbar1, rho = 0, gamma = 0)
+wlr_estimates(ybar0, ybar1, nbar0, nbar1, S_pool = NULL, rho = 0, gamma = 0)
 }
 \arguments{
 \item{ybar0}{Number at risk in group 0.}

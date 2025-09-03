@@ -23,6 +23,8 @@ df_counting(
   cox.eps = 0.001,
   lr.eps = 0.001,
   qprob = 0.5,
+  rho = 0,
+  gamma = 0,
   conf_level = 0.95,
   check.KM = TRUE,
   stop.onerror = FALSE,
