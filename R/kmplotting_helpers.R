@@ -1,15 +1,46 @@
 #' KM plotting helper
 #' @export
-plot_km_curves_counting <- function(at.points, S0.KM, idx0, idv0, S1.KM, idx1, idv1, col.0,
+plot_km_curves_counting <- function(at.points, S0.KM, idx0, idv0, S1.KM, idx1, idv1, col.0, se0.KM = NULL, se1.KM = NULL, conf.int = FALSE, conf_level = 0.95,
                                     col.1, ltys, lwds, Xlab, Ylab, ylim, xlim, show.ticks=FALSE, cens0= NULL, risk.points, risk.points.label,
                                     cens1 = NULL, S0.KM.full = NULL, S1.KM.full=NULL, censor.cex = 1.0, time.zero=0, tpoints.add = c(0), ...){
 
-  plot(at.points[idv1], S1.KM[idv1], type = "s", ylim = ylim, xlim = xlim, lty = ltys[1], col = col.1, lwd = lwds[1], xlab = Xlab, ylab = Ylab, yaxt="n",
+  plot(at.points[idv1], S1.KM[idv1], type = "n", ylim = ylim, xlim = xlim, lty = ltys[1], col = col.1, lwd = lwds[1], xlab = Xlab, ylab = Ylab, yaxt="n",
        xaxt="n", ...)
   axis(2,las=2)
   axis(1, at = risk.points, labels = risk.points.label)
 
+
+  if(conf.int){
+  z <- qnorm(1 - (1 - conf_level) / 2)
+  survival_probs <- S0.KM
+  se_probs <- se0.KM
+  lower <- exp(log(survival_probs) - z * se_probs / survival_probs)
+  upper <- exp(log(survival_probs) + z * se_probs / survival_probs)
+  x <- at.points[idv0]
+  lower <- lower[idv0]
+  upper <- upper[idv0]
+  polygon(
+    c(x[order(x)], rev(x[order(x)])),
+    c(lower[order(x)], rev(upper[order(x)])),
+    col = "lightgrey", border = FALSE
+  )
+  survival_probs <- S1.KM
+  se_probs <- se1.KM
+  lower <- exp(log(survival_probs) - z * se_probs / survival_probs)
+  upper <- exp(log(survival_probs) + z * se_probs / survival_probs)
+  x <- at.points[idv1]
+  lower <- lower[idv1]
+  upper <- upper[idv1]
+  polygon(
+    c(x[order(x)], rev(x[order(x)])),
+    c(lower[order(x)], rev(upper[order(x)])),
+    col = "lightblue", border = FALSE
+  )
+  }
+
+  lines(at.points[idv1], S1.KM[idv1], type = "s", lty = ltys[1], col = col.1, lwd = lwds[1])
   lines(at.points[idv0], S0.KM[idv0], type = "s", lty = ltys[2], col = col.0, lwd = lwds[2])
+
 
   if (show.ticks && !is.null(cens0)) {
     points(cens0, S0.KM[idx0], pch = 3, col = col.0, cex = censor.cex)
@@ -28,7 +59,7 @@ KM_plot_2sample_weighted_counting <- function(dfcount, show.cox = FALSE, cox.cex
                                               check.KM = TRUE, put.legend.cox = "topright", put.legend.lr = "top",
                                               lr.digits = 2, cox.digits = 2, tpoints.add = c(0), by.risk = NULL, Xlab = "time",
                                               Ylab = "proportion surviving", col.0 = "black", col.1 = "blue", show.med = FALSE,
-                                              med.digits = 2, med.font=3,
+                                              med.digits = 2, med.font=3, conf.int = FALSE, conf_level = 0.95,
                                               choose_ylim = FALSE, arm.cex = 0.7, quant = 0.5, qlabel = "median =", med.cex = 0.725,
                                               ymed.offset = 0.10, xmed.fraction = 0.5, risk.cex = 0.725, plotit = TRUE,
                                               ltys = c(1, 1), lwds = c(1, 1), censor.mark.all = TRUE, censor.cex = 0.5,
@@ -45,6 +76,7 @@ KM_plot_2sample_weighted_counting <- function(dfcount, show.cox = FALSE, cox.cex
   # events
   idv0 <- dfcount$idv0
   S0.KM <- dfcount$surv0
+  se0.KM <- sqrt(dfcount$sig2_surv0)
   # censorings not events
   idx0 <- dfcount$idx0
   cens0 <- dfcount$cens0
@@ -52,6 +84,7 @@ KM_plot_2sample_weighted_counting <- function(dfcount, show.cox = FALSE, cox.cex
 
   idv1 <- dfcount$idv1
   S1.KM <- dfcount$surv1
+  se1.KM <- sqrt(dfcount$sig2_surv1)
   idx1 <- dfcount$idx1
   cens1 <- dfcount$cens1
   rpoints1 <- dfcount$riskpoints1
@@ -76,7 +109,7 @@ KM_plot_2sample_weighted_counting <- function(dfcount, show.cox = FALSE, cox.cex
                           risk.points = risk.points, risk.points.label = risk.points.label,
                           xlim = c(xmin, ifelse(is.null(xmax), max(c(at.points)), xmax)),
                           show.ticks = show.ticks, cens0 = cens0, cens1 = cens1,
-                          censor.cex = censor.cex)
+                          censor.cex = censor.cex, conf.int = conf.int, conf_level = conf_level, se1.KM = se1.KM, se0.KM = se0.KM)
 
   if (risk.set) {
     text(risk.points, rep(ifelse(is.null(y.risk0), ymin - risk_offset, y.risk0), length(risk.points)),

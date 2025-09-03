@@ -103,15 +103,14 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
     )
   }
   ans$cox_results <- cox_results
-
   logrank_results <- NULL
-
   if (!requireNamespace("survival", quietly = TRUE)) stop("Package 'survival' is required for logrank test.")
   surv_obj <- survival::Surv(df[[tte.name]], df[[event.name]])
   group <- df[[treat.name]]
+ # survdiff does not support case weights
   if (!is.null(strata.name)) {
     strata_var <- df[[strata.name]]
-    logrank_formula <- as.formula(paste0("surv_obj ~ group + strata(strata_var)"))
+    logrank_formula <- as.formula(paste0("surv_obj ~ group + strata(strata_var), rho = rho"))
     logrank_fit <- eval(bquote(survival::survdiff(.(logrank_formula))))
   } else {
     logrank_fit <- survival::survdiff(surv_obj ~ group, rho = rho)
@@ -161,8 +160,8 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
   ybar0 <- colSums(outer(U0, at_points, FUN = ">=") * W0)
   nbar0 <- colSums(outer(U0[D0 == 1], at_points, FUN = "<=") * W0[D0 == 1])
 
-  cens0 <- time[z==0 & delta == 0]
-  ev0 <- sort(unique(time[z==0 & delta == 1]))
+  cens0 <- time[z == 0 & delta == 0]
+  ev0 <- sort(unique(time[z == 0 & delta == 1]))
   # Censoring that are NOT an event
   if(!censoring_allmarks) cens0 <- setdiff(cens0, ev0)
   idx0 <- match(cens0, at_points)
@@ -170,33 +169,34 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
   # used for checking KM fits
   idv0.check <- match(ev0, at_points)
   # append events to include max time
-  ev0 <- c(ev0,max(time[z==0]))
+  ev0 <- c(ev0,max(time[z == 0]))
   idv0 <- match(ev0, at_points)
   ans$idv0 <- idv0
   ans$ev0 <- ev0
   ans$cens0 <- cens0
   ans$riskpoints0 <- ybar0[match(risk.points,at_points)]
-
+  ans$idv0.check <- idv0.check
 
   temp <- KM_estimates(ybar = ybar0, nbar = nbar0)
   surv0 <- temp$S_KM
   sig2_surv0 <- temp$sig2_KM
   U1 <- time[z == 1]
   D1 <- delta[z == 1]
-  W1 <- wgt[z== 1]
+  W1 <- wgt[z == 1]
 
   ybar1 <- colSums(outer(U1, at_points, FUN = ">=") * W1)
   nbar1 <- colSums(outer(U1[D1 == 1], at_points, FUN = "<=") * W1[D1 == 1])
 
-  cens1 <- time[z==1 & delta == 0]
-  ev1 <- sort(unique(time[z==1 & delta == 1]))
+  cens1 <- time[z == 1 & delta == 0]
+  ev1 <- sort(unique(time[z == 1 & delta == 1]))
   if(!censoring_allmarks) cens1 <- setdiff(cens1, ev1)
   idx1 <- match(cens1, at_points)
   ans$idx1 <- idx1
   idv1.check <- match(ev1, at_points)
-  ev1 <- c(ev1,max(time[z==1]))
+  ev1 <- c(ev1,max(time[z == 1]))
   idv1 <- match(ev1, at_points)
   ans$idv1 <- idv1
+  ans$idv1.check <- idv1.check
 
   ans$ev1 <- ev1
   ans$cens1 <- cens1
@@ -210,7 +210,8 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
   temp <- KM_estimates(ybar = ybar0 + ybar1, nbar = nbar0 + nbar1)
   survP <- temp$S_KM
   sig2_survP <- temp$sig2_KM
-  get_lr <- wlr_estimates(ybar0 = ybar0, ybar1 = ybar1, nbar0 = nbar0, nbar1 = nbar1, rho = rho, gamma = gamma, S_pool = survP)
+  get_lr <- wlr_estimates(ybar0 = ybar0, ybar1 = ybar1, nbar0 = nbar0, nbar1 = nbar1,
+                          rho = rho, gamma = gamma, S_pool = survP)
   # Quantiles
   get_kmq <- km_quantile_table(at_points, surv0, se0=sqrt(sig2_surv0), surv1, se1=sqrt(sig2_surv1), arms,
                                qprob = qprob, type = c("midpoint"), conf_level = conf_level)
@@ -222,15 +223,16 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
   # KM curve checks
   if (check.KM) {
     # control arm will be first stratum
-    check_fit <- survfit(Surv(time,delta) ~ z, weights=wgt)
+    check_fit <- survfit(Surv(time,delta) ~ z, weights = wgt)
     check_sfit <- summary(check_fit)
     strata_names <- as.character(check_sfit$strata)
     strata_lengths <- rle(strata_names)$lengths
     strata_labels <- rle(strata_names)$values
     split_times <- split(check_sfit$time, rep(strata_labels, strata_lengths))
     split_surv  <- split(check_sfit$surv, rep(strata_labels, strata_lengths))
-    df0_check <- data.frame(time=split_times[[1]], surv=split_surv[[1]])
-    df1_check <- data.frame(time=split_times[[2]], surv=split_surv[[2]])
+    split_se  <- split(check_sfit$std.err, rep(strata_labels, strata_lengths))
+    df0_check <- data.frame(time=split_times[[1]], surv=split_surv[[1]], se = split_se[[1]])
+    df1_check <- data.frame(time=split_times[[2]], surv=split_surv[[2]], se = split_se[[2]])
     # Note: the quantile() function can yield different results than median table
     # The median table calculations appear more stable ...
     if(qprob != 0.50){
@@ -243,6 +245,7 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
         lower = as.vector(qtab$lower),
         upper = as.vector(qtab$upper)
       )
+    ans$quantile_check <- quantile_table
     }
     if(qprob == 0.50){
       qtab <- summary(check_fit)$table[, c("median", "0.95LCL", "0.95UCL")]
@@ -251,14 +254,15 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
         lower = qtab[, "0.95LCL"],
         upper = qtab[, "0.95UCL"]
       )
-    }
+      ans$quantile_check <- quantile_table
+        }
     # First row is control here
     qcheck_0 <- quantile_table[1,c("time","lower","upper")]
     aa <- c(unlist(qcheck_0))
     bb <- c(unlist(get_kmq[2,c("quantile","lower","upper")]))
     dcheck <- round(abs(aa-bb),6)
     if(max(dcheck,na.rm=TRUE) > 1e-6){
-      msg <- paste0(arms[2]," : ", "discrepancy in quantile calculations")
+      msg <- paste0(arms[2]," : ", "Control: discrepancy in quantile calculations")
       if (stop.onerror) stop(msg) else warning(msg)
     }
     qcheck_1 <- quantile_table[2,c("time","lower","upper")]
@@ -266,10 +270,13 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
     bb <- c(unlist(get_kmq[1,c("quantile","lower","upper")]))
     dcheck <- round(abs(aa-bb),6)
     if(max(dcheck,na.rm=TRUE) > 1e-6){
-      msg <- paste0(arms[1]," : ", "discrepancy in quantile calculations")
+      msg <- paste0(arms[1]," : ", "Treatment: discrepancy in quantile calculations")
       if (stop.onerror) stop(msg) else warning(msg)
     }
-    check_km_curve <- function(S.KM, df_check, group_name = "Group") {
+    check_km_curve <- function(time, S.KM, se.KM, df_check, group_name = "Group") {
+    yymax <- max(c(se.KM, df_check$se))
+    plot(time,se.KM, type="s", lty=1, col="lightgrey", lwd=4, ylim=c(0,yymax))
+    with(df_check, lines(time, se, type="s", lty=2, lwd=1, col="red"))
         if (any(S.KM < 0 | S.KM > 1)) {
         msg <- paste0(group_name, " : ","KM curve has values outside [0,1].")
         if (stop.onerror) stop(msg) else warning(msg)
@@ -283,9 +290,14 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
         msg <- paste0(group_name," : ", "Discrepancy in KM curve fit.")
         if (stop.onerror) stop(msg) else warning(msg)
       }
+      if(round(max(abs(se.KM-df_check$se)),8)) {
+        msg <- paste0(group_name," : ", "Discrepancy in se(KM) curve fit.")
+        if (stop.onerror) stop(msg) else warning(msg)
+      }
     }
-    check_km_curve(surv1[idv1.check], df1_check, "Group 1")
-    check_km_curve(surv0[idv0.check], df0_check, "Group 0")
+    par(mfrow=c(1,2))
+    check_km_curve(at_points[idv0.check],surv0[idv0.check], sqrt(sig2_surv0[idv0.check]), df0_check, "control")
+    check_km_curve(at_points[idv1.check],surv1[idv1.check], sqrt(sig2_surv1[idv1.check]), df1_check, "treat")
   }
   ans$lr <- get_lr$lr
   ans$sig2_lr <- get_lr$sig2
@@ -345,11 +357,13 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
       survP_mat[, ss] <- temp$S_KM
       sig2_survP_mat[, ss] <- temp$sig2_KM
 
-      get_score <- z_score_calculations(nbar0 = nbar0_s,ybar0 = ybar0_s,nbar1 = nbar1_s, ybar1 = ybar1_s, rho = rho, gamma = gamma, S_pool = temp$S_KM, rho = rho, gamma = gamma)
+      get_score <- z_score_calculations(nbar0 = nbar0_s,ybar0 = ybar0_s,nbar1 = nbar1_s, ybar1 = ybar1_s,
+                                        rho = rho, gamma = gamma, S_pool = temp$S_KM, rho = rho, gamma = gamma)
       score_stratified <- score_stratified + get_score$score
       sig2_score_stratified <- sig2_score_stratified + get_score$sig2.score
 
-      temp <- wlr_estimates(ybar0 = ybar0_s, ybar1 = ybar1_s, nbar0 = nbar0_s, nbar1 = nbar1_s, rho = rho, gamma = gamma, S_pool = temp$S_KM, rho = rho, gamma = gamma)
+      temp <- wlr_estimates(ybar0 = ybar0_s, ybar1 = ybar1_s, nbar0 = nbar0_s, nbar1 = nbar1_s,
+                            rho = rho, gamma = gamma, S_pool = temp$S_KM, rho = rho, gamma = gamma)
       lr_stratified <- lr_stratified + temp$lr
       sig2_lr_stratified <- sig2_lr_stratified + temp$sig2
 
@@ -382,7 +396,7 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
     }
 
   # Compare with survdiff for gamma=0 (survdiff only handles gamma=0)
-  if(is.null(weight.name) && is.null(strata.name) && gamma == 0){
+  if(is.null(weights.name) && is.null(strata.name) && gamma == 0){
     z_lr <- with(get_lr,lr/sqrt(sig2))
     zsq_lr_check <- logrank_results$chisq
     if(round(z_lr^2 - zsq_lr_check,8)>0){
@@ -391,7 +405,7 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
     }
   }
 
-  if(is.null(weight.name) && !is.null(strata.name) && gamma == 0){
+  if(is.null(weights.name) && !is.null(strata.name) && gamma == 0){
     z_lr <- lr_stratified/sqrt(sig2_lr_stratified)
     zsq_lr_check <- logrank_results$chisq
     if(round(z_lr^2 - zsq_lr_check,8)>0){

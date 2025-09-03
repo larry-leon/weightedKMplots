@@ -58,7 +58,7 @@ kmq_calculations <- function(time_points, survival_probs, qprob = 0.5, type = "m
   qjt1 <- suppressWarnings(min(survival_probs[survival_probs > qprob]))
   tq1 <- suppressWarnings(min(time_points[which(survival_probs == qjt1)]))
   tq.hat <- tq2
-  mid_flag <- !is.na(qjt1) && (round(qjt1, 6) == qprob)
+  mid_flag <- !is.na(qjt1) && (round(qjt1, 12) == qprob)
   if (type == "midpoint" && mid_flag) {
     tq.hat <- tq1 + (tq2 - tq1) / 2
   }
@@ -120,11 +120,11 @@ km_quantile_table <- function(time_points, surv0, se0, surv1, se1, arms = c("tre
 #' @param nbar Number of events at each time.
 #' @return List with survival and variance estimates.
 #' @export
-KM_estimates <- function(ybar, nbar) {
+KM_estimates <- function(ybar, nbar){
   dN <- diff(c(0, nbar))
   dN_risk <- ifelse(ybar > 0, dN / ybar, 0.0)
   S_KM <- cumprod(1 - dN_risk)
-  aa <- dN
+  aa <-  dN
   bb <- ybar * (ybar - dN)
   var_KM <- (S_KM^2) * cumsum(ifelse(ybar > 0, aa / bb, 0.0))
   list(S_KM = S_KM, sig2_KM = var_KM)
@@ -293,7 +293,10 @@ z_score_calculations <- function(nbar0, ybar0, nbar1, ybar1, rho = 0, gamma = 0,
 w <- rep(1, length(nbar0))
 if( rho != 0.0 | gamma != 0.0){
   if(is.null(S_pool)){
-    dN_Risk <- ifelse(risk_pooled > 0, dN_pooled / risk_pooled, 0)
+    ybar <- ybar0 + ybar1
+    nbar <- nbar0 + nbar1
+    dN <- diff(c(0,nbar))
+    dN_Risk <- ifelse(ybar > 0, dN / ybar, 0)
     S_pool <- cumprod(1 - dN_Risk)
     S_pool <- c(1, S_pool[-length(S_pool)]) # S_pool(t-)
   }
