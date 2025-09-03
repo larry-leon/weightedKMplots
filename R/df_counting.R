@@ -274,9 +274,6 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
       if (stop.onerror) stop(msg) else warning(msg)
     }
     check_km_curve <- function(time, S.KM, se.KM, df_check, group_name = "Group") {
-    yymax <- max(c(se.KM, df_check$se))
-    plot(time,se.KM, type="s", lty=1, col="lightgrey", lwd=4, ylim=c(0,yymax))
-    with(df_check, lines(time, se, type="s", lty=2, lwd=1, col="red"))
         if (any(S.KM < 0 | S.KM > 1)) {
         msg <- paste0(group_name, " : ","KM curve has values outside [0,1].")
         if (stop.onerror) stop(msg) else warning(msg)
@@ -291,6 +288,9 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
         if (stop.onerror) stop(msg) else warning(msg)
       }
       if(round(max(abs(se.KM-df_check$se)),8)) {
+        yymax <- max(c(se.KM, df_check$se))
+        plot(time,se.KM, type="s", lty=1, col="lightgrey", lwd=4, ylim=c(0,yymax), xlab="time", ylab="SE(KM)")
+        with(df_check, lines(time, se, type="s", lty=2, lwd=1, col="red"))
         msg <- paste0(group_name," : ", "Discrepancy in se(KM) curve fit.")
         if (stop.onerror) stop(msg) else warning(msg)
       }
