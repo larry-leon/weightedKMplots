@@ -176,6 +176,18 @@ add_legends <- function(dfcount, show.cox, cox.cex, put.legend.cox, show.logrank
   }
 }
 
+
+#' Kaplan-Meier Plot for Two Samples with Weighted Counting
+#'
+#' Plots Kaplan-Meier survival curves for two samples using weighted counting.
+#' Optionally displays Cox proportional hazards results and log-rank test statistics.
+#'
+#' @param dfcount Data frame containing survival data. Must include columns for time, status, group, and weights.
+#' @param show.cox Logical; if TRUE, displays Cox proportional hazards results on the plot.
+#' @param cox.cex Numeric; character expansion factor for Cox results text.
+#' @param show.logrank Logical; if TRUE, displays log-rank test statistics on the plot.
+#' @return A plot is produced. No return value.
+#' @export
 KM_plot_2sample_weighted_counting <- function(
     dfcount, show.cox = FALSE, cox.cex = 0.725, show.logrank = FALSE,
     logrank.cex = 0.725, cox.eps = 0.001, lr.eps = 0.001, show_arm_legend = TRUE,

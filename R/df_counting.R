@@ -396,7 +396,7 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
     }
 
   # Compare with survdiff for gamma=0 (survdiff only handles gamma=0)
-  if(is.null(weights.name) && is.null(strata.name) && gamma == 0){
+  if(is.null(weight.name) && is.null(strata.name) && gamma == 0){
     z_lr <- with(get_lr,lr/sqrt(sig2))
     zsq_lr_check <- logrank_results$chisq
     if(round(z_lr^2 - zsq_lr_check,8)>0){
@@ -405,7 +405,7 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
     }
   }
 
-  if(is.null(weights.name) && !is.null(strata.name) && gamma == 0){
+  if(is.null(weight.name) && !is.null(strata.name) && gamma == 0){
     z_lr <- lr_stratified/sqrt(sig2_lr_stratified)
     zsq_lr_check <- logrank_results$chisq
     if(round(z_lr^2 - zsq_lr_check,8)>0){
