@@ -2,6 +2,7 @@
 
 export(KM_diff)
 export(KM_estimates)
+export(KM_plot_2sample_weighted_counting)
 export(add_legends)
 export(add_median_annotation)
 export(add_risk_table)
