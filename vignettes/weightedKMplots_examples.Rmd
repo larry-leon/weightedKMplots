@@ -1,0 +1,240 @@
+---
+title: "Weighted KM Plots Examples"
+output: html_document
+---
+# Survival Analysis and KM Plotting - Refactored Version
+
+Survival Analysis and KM Plotting - Refactored Version
+
+```{r}
+library(survival)
+library(weightedKMplots)
+
+source("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/R/df_counting_improved.R")
+source("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/R/km_calculations_helpers.R")
+#survminer is only used for 1 plot comparison
+library(survminer)
+```
+---- Data Preparation ----
+
+Prepare GBSG data
+```{r}
+df_gbsg <- gbsg
+df_gbsg$time_months <- df_gbsg$rfstime / 30.4375
+tte.name <- "time_months"
+event.name <- "status"
+treat.name <- "hormon"
+arms <- c("treat", "control")
+
+```
+---- Main Analyses ----
+
+1. GBSG - ITT Analysis
+```{r}
+dfcount_gbsg <- df_counting(df=df_gbsg, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, by.risk = 12)
+```
+check log-rank statistics
+```{r}
+check_results(dfcount_gbsg)
+
+```
+2. Stratified by grade
+Just for illustration
+```{r}
+res <- df_counting(df=df_gbsg, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, strata.name="grade")
+```
+stratified
+```{r}
+with(res,lr_stratified^2/sig2_lr_stratified)
+```
+non-stratified (should be same as above)
+```{r}
+with(res,lr^2/sig2_lr)
+```
+survdiff stratified
+```{r}
+res$logrank_results$chisq
+```
+non-stratified
+```{r}
+with(res,z.score^2)
+```
+stratified
+```{r}
+with(res,z.score_stratified^2)
+
+```
+3. Subgroup Analyses (meno)
+```{r}
+for (meno_val in c(0, 1)) {
+  df_sg <- subset(df_gbsg, meno == meno_val)
+  sg_res <- get_dfcounting(df=df_sg, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms)
+  check_results(sg_res)
+}
+
+```
+4. Add duplicate subject (pid==51) for testing
+```{r}
+df_add <- subset(df_gbsg, pid == 51)
+df_add$status <- 1.0
+df_mod <- rbind(df_gbsg, df_add)
+dfcount_mod <- get_dfcounting(df=df_mod, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms)
+check_results(dfcount_mod)
+
+```
+
+---- Plotting ----
+
+
+GBSG KM plots
+```{r, fig.width = 8, fig.height=6}
+par(mfrow=c(1,2))
+# Mine
+plot_weighted_km(dfcount=dfcount_gbsg, conf.int=FALSE)
+# Compare with survfit
+plot_km(df=df_gbsg, tte.name=tte.name, event.name=event.name, treat.name=treat.name)
+```
+
+Compare with survminer
+
+```{r, fig.width = 8, fig.height=6}
+
+plot_weighted_km(dfcount=dfcount_gbsg, conf.int=TRUE)
+
+km_fit <- survfit(Surv(time_months,status) ~ hormon, data=df_gbsg)
+ggsurvplot(km_fit,conf.int=TRUE, risk.table = TRUE, break.time.by=12, xlim=c(0,86),
+           tables.height = 0.2,tables.theme = theme_cleantable(),censor=TRUE)
+
+```
+
+
+
+
+For modified data
+```{r, fig.width = 8, fig.height=6}
+par(mfrow=c(1,2))
+plot_weighted_km(dfcount_mod)
+plot_km(df=df_mod, tte.name=tte.name, event.name=event.name, treat.name=treat.name)
+
+
+```
+
+---- Propensity Score Weighting (Rotterdam) ----
+
+Prepare Rotterdam data
+```{r}
+gbsg_validate <- within(rotterdam, {
+  rfstime <- ifelse(recur == 1, rtime, dtime)
+  t_months <- rfstime / 30.4375
+  time_months <- t_months
+  status <- pmax(recur, death)
+  ignore <- (recur == 0 & death == 1 & rtime < dtime)
+  status2 <- ifelse(recur == 1 | ignore, recur, death)
+  rfstime2 <- ifelse(recur == 1 | ignore, rtime, dtime)
+  time_months2 <- rfstime2 / 30.4375
+  grade3 <- ifelse(grade == "3", 1, 0)
+  treat <- hormon
+  id <- as.numeric(1:nrow(rotterdam))
+  SG0 <- ifelse(er <= 0, 0, 1)
+})
+
+tte.name <- "time_months"
+event.name <- "status"
+treat.name <- "treat"
+wt.name <- "sw.weights"
+
+```
+Node positive only to correspond to GBSG population
+```{r}
+df_rotterdam <- subset(gbsg_validate, nodes > 0)
+
+```
+Propensity score model
+```{r}
+fit.ps <- glm(treat ~ age + meno + size + grade3 + nodes + pgr + chemo + er, data=df_rotterdam, family="binomial")
+pihat <- fit.ps$fitted
+pihat.null <- glm(treat ~ 1, family="binomial", data=df_rotterdam)$fitted
+wt.1 <- pihat.null / pihat
+wt.0 <- (1 - pihat.null) / (1 - pihat)
+df_rotterdam$sw.weights <- ifelse(df_rotterdam$treat == 1, wt.1, wt.0)
+# truncated weights
+df_rotterdam$sw.weights_trunc <- with(df_rotterdam, pmin(pmax(sw.weights, quantile(sw.weights, 0.05)), quantile(sw.weights, 0.95)))
+
+```
+Weighted and unweighted analyses
+```{r}
+dfcount_rotterdam_unwtd <- get_dfcounting(df=df_rotterdam, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, by.risk=24)
+```
+
+
+```{r}
+dfcount_rotterdam_wtd <- get_dfcounting(df=df_rotterdam, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, by.risk=24, 
+                                  weight.name="sw.weights", check.KM = TRUE, draws = 0)
+```
+
+```{r}
+dfcount_rotterdam_wtd <- get_dfcounting(df=df_rotterdam, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, by.risk=24, 
+                                  weight.name="sw.weights", check.KM=TRUE, draws = 5000)
+```
+
+
+
+
+---- Plotting Weighted vs Unweighted ----
+
+```{r, fig.width = 10, fig.height=6}
+par(mfrow=c(1,2))
+plot_weighted_km(dfcount=dfcount_rotterdam_unwtd)
+plot_weighted_km(dfcount=dfcount_rotterdam_wtd)
+
+```
+Compare with GBSG trial data
+```{r, fig.width = 10, fig.height=6}
+par(mfrow=c(1,2))
+plot_weighted_km(dfcount=dfcount_gbsg, conf.int = TRUE)
+plot_weighted_km(dfcount=dfcount_rotterdam_wtd, conf.int = TRUE)
+
+```
+
+---- Simultaneous CI bands ----
+```{r, eval=FALSE}
+par(mfrow=c(1,1))
+  temp <- plotKM.band_subgroups(
+    df=df_gbsg,
+    xlabel="Months", ylabel="Survival difference",
+    yseq_length=5, cex_Yaxis=0.7, risk_cex=0.7,
+    tau_add=42, by.risk=6, risk_delta=0.075, risk.pad=0.03,
+    tte.name = "time_months", treat.name = "hormon", event.name = "status", draws.band = 1000, qtau = 0.025, show_resamples = TRUE,
+  )
+  legend("topleft", c("ITT"),
+         lwd=2, col=c("black"), bty="n", cex=0.75)
+
+```
+
+
+---- Subgroup Band Plot ----
+```{r, eval=FALSE}
+par(mfrow=c(1,1))
+sg_labs <- c("er==0","er==1")
+sg_cols <- c("blue", "brown")
+
+# Randomly sample colors from the built-in palette
+# n_sg <- length(sg_labs)
+# set.seed(123) # for reproducibility
+# sg_cols <- sample(colors(), n_sg)
+
+  temp <- plotKM.band_subgroups(
+    df=df_gbsg,
+    sg_labels = sg_labs,
+    sg_colors = sg_cols,
+    xlabel="Months", ylabel="Survival difference",
+    yseq_length=5, cex_Yaxis=0.7, risk_cex=0.7,
+    tau_add=42, by.risk=6, risk_delta=0.075, risk.pad=0.03, draws.band = 1000,
+    tte.name = "time_months", treat.name = "hormon", event.name = "status", 
+  )
+  legend("topleft", c("ITT", sg_labs),
+         lwd=2, col=c("black", sg_cols), bty="n", cex=0.75)
+
+```
+
+---- End of Script ----

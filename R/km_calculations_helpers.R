@@ -120,13 +120,14 @@ km_quantile_table <- function(time_points, surv0, se0, surv1, se1, arms = c("tre
 #' @param nbar Number of events at each time.
 #' @return List with survival and variance estimates.
 #' @export
-KM_estimates <- function(ybar, nbar){
+KM_estimates <- function(ybar, nbar, sig2w_multiplier = NULL){
   dN <- diff(c(0, nbar))
   dN_risk <- ifelse(ybar > 0, dN / ybar, 0.0)
   S_KM <- cumprod(1 - dN_risk)
-  aa <-  dN
-  bb <- ybar * (ybar - dN)
-  var_KM <- (S_KM^2) * cumsum(ifelse(ybar > 0, aa / bb, 0.0))
+  if(is.null(sig2w_multiplier)){
+  sig2w_multiplier  <- ifelse(ybar > 0 & ybar > dN, dN / (ybar * (ybar - dN)), 0.0)
+  }
+  var_KM <- (S_KM^2) * cumsum(sig2w_multiplier)
   list(S_KM = S_KM, sig2_KM = var_KM)
 }
 
@@ -231,7 +232,29 @@ wlr_dhat_estimates <- function(dfcounting, rho = 0, gamma = 0, tzero = 24) {
 #' @param alpha Significance level.
 #' @return List with survival, difference, and CI estimates.
 #' @export
-KM_diff <- function(df, tte.name, event.name, treat.name, weight.name=NULL, at.points = sort(df[[tte.name]]), alpha = 0.05) {
+KM_diff <- function(df, tte.name, event.name, treat.name, weight.name=NULL, at.points = sort(df[[tte.name]]), alpha = 0.05, seedstart = 8316951, draws = 0,
+                    risk.points, draws.band = 0, tau.seq = 0.25, qtau = 0.025, show_resamples = TRUE) {
+
+  required_cols <- c(tte.name, event.name, treat.name)
+  missing_cols <- setdiff(required_cols, names(df))
+  if (length(missing_cols) > 0) {
+    stop(paste("Missing required columns in df:", paste(missing_cols, collapse = ", ")))
+  }
+
+  # Check treatment coding
+  if (!all(df[[treat.name]] %in% c(0, 1))) {
+    stop("Treatment must be numerical indicator: 0=control, 1=experimental")
+  }
+
+  # Check event coding
+  if (!all(df[[event.name]] %in% c(0, 1))) {
+    stop("Event must be binary (0/1).")
+  }
+
+  # Check for NA values
+  if (any(is.na(df[[tte.name]]))) warning("NA values found in time-to-event column.")
+  if (any(is.na(df[[event.name]]))) warning("NA values found in event column.")
+  if (any(is.na(df[[treat.name]]))) warning("NA values found in treatment column.")
 
   tfixed <- aeqSurv(Surv(df[[tte.name]],df[[event.name]]))
   time<- tfixed[,"time"]
@@ -249,35 +272,105 @@ KM_diff <- function(df, tte.name, event.name, treat.name, weight.name=NULL, at.p
     wgt <- wgt[ord]
   }
 
-  U0 <- time[z == 0]
-  D0 <- delta[z == 0]
-  W0 <- wgt[z == 0]
+ # For simultaneous bands restrict time range
+  if(draws.band > 0){
+  taus <- quantile(time[delta ==1], c(qtau, 1-qtau))
+  at.points<-seq(taus[1],taus[2], by =tau.seq)
+  riskp <- risk.points[which(risk.points <= taus[2])]
+  at.points <- sort(unique(c(at.points, riskp)))
+  }
 
-  ybar0 <- colSums(outer(U0, at.points, FUN = ">=") * W0)
-  nbar0 <- colSums(outer(U0[D0 == 1], at.points, FUN = "<=") * W0[D0 == 1])
-  temp <- KM_estimates(ybar = ybar0, nbar = nbar0)
+  # Treatment arm
+  group_data <- extract_group_data(time, delta, wgt, z, group = 1)
+  risk_event <- calculate_risk_event_counts(group_data$U, group_data$D, group_data$W, at_points = at.points, draws = draws, seedstart = seedstart)
+  temp <- KM_estimates(ybar = risk_event$ybar, nbar = risk_event$nbar, sig2w_multiplier = risk_event$sig2w_multiplier)
+  risk_event1 <- risk_event
+  group_data1 <- group_data
+  surv1 <- temp$S_KM
+  sig2_surv1 <- temp$sig2_KM
+
+  # Treatment arm
+  group_data <- extract_group_data(time, delta, wgt, z, group = 0)
+  risk_event <- calculate_risk_event_counts(group_data$U, group_data$D, group_data$W, at_points = at.points, draws = draws, seedstart = seedstart)
+  temp <- KM_estimates(ybar = risk_event$ybar, nbar = risk_event$nbar, sig2w_multiplier = risk_event$sig2w_multiplier)
+  risk_event0 <- risk_event
+  group_data0 <- group_data
   surv0 <- temp$S_KM
   sig2_surv0 <- temp$sig2_KM
 
-  U1 <- time[z == 1]
-  D1 <- delta[z == 1]
-  W1 <- wgt[z == 1]
-
-  ybar1 <- colSums(outer(U1, at.points, FUN = ">=") * W1)
-  nbar1 <- colSums(outer(U1[D1 == 1], at.points, FUN = "<=") * W1[D1 == 1])
-
-  temp <- KM_estimates(ybar = ybar1, nbar = nbar1)
-  surv1 <- temp$S_KM
-  sig2_surv1 <- temp$sig2_KM
   dhat <- surv1 - surv0
   sig2_dhat <- sig2_surv0 + sig2_surv1
+
+  #print(summary(sig2_dhat))
+
+  surv0_star <- surv1_star <- dhat_star <- NULL
+  c_alpha_band <- sb_lower <- sb_upper <- NULL
+
+  if(draws.band > 0){
+  # draws > 0
+  set.seed(seedstart)
+  # Control
+  n0 <- length(group_data0$U)
+  U <- group_data0$U
+  W <- group_data0$W
+  D <- group_data0$D
+  event_mat <- outer(U, at.points, FUN = "<=")
+  risk_mat  <- outer(U, at.points, FUN = ">=")
+  risk_w <- colSums(risk_mat *  W)
+
+   G0.draws <- matrix(rnorm(draws.band * n0), ncol = draws.band)
+   counting_star_all <- t(event_mat * W) %*% (D * G0.draws)
+   dN_star_all <- apply(counting_star_all, 2, function(x) diff(c(0, x)))
+   drisk_star <- sweep(dN_star_all, 1, risk_w, "/")
+   drisk_star[is.infinite(drisk_star) | is.nan(drisk_star)] <- 0
+   # (length(at.points) x draws.band) dimension
+   surv0_star <- (-1) * surv0 * apply(drisk_star, 2, cumsum)
+
+  # Treatment
+  n1 <- length(group_data1$U)
+  U <- group_data1$U
+  W <- group_data1$W
+  D <- group_data1$D
+  event_mat <- outer(U, at.points, FUN = "<=")
+  risk_mat  <- outer(U, at.points, FUN = ">=")
+  risk_w <- colSums(risk_mat *  W)
+  G1.draws <- matrix(rnorm(draws.band * n1), ncol = draws.band)
+  counting_star_all <- t(event_mat * W) %*% (D * G1.draws)
+  dN_star_all <- apply(counting_star_all, 2, function(x) diff(c(0, x)))
+  drisk_star <- sweep(dN_star_all, 1, risk_w, "/")
+  drisk_star[is.infinite(drisk_star) | is.nan(drisk_star)] <- 0
+  # (length(at.points) x draws.band) dimension
+  surv1_star <- (-1) * surv1 * apply(drisk_star, 2, cumsum)
+  dhat_star <- (surv1_star - surv0_star) / sqrt(sig2_dhat)
+
+  #print(dim(dhat_star))
+
+  # simultaneous band
+  sups <- apply(abs(dhat_star), 2, max, na.rm = TRUE)
+  c_alpha_band <- quantile(sups,c(0.95))
+# Show first 20
+if(show_resamples){
+  matplot(at.points, dhat_star[,c(1:20)], type="s", xlab="time", ylab = "Survival differences (1st 20)", main = sprintf("c_alpha (simul. band): %.2f", c_alpha_band)
+          )
+}
+
+  # simulataneous band
+  sb_lower <- dhat - c_alpha_band * sqrt(sig2_dhat)
+  sb_upper <- dhat + c_alpha_band * sqrt(sig2_dhat)
+  }
+
+
+ # Standard point-wise CIs
   c_alpha <- qnorm(1 - alpha / 2)
   lower <- dhat - c_alpha * sqrt(sig2_dhat)
   upper <- dhat + c_alpha * sqrt(sig2_dhat)
+
   list(
     at.points = at.points, surv0 = surv0, sig2_surv0 = sig2_surv0,
     surv1 = surv1, sig2_surv1 = sig2_surv1, dhat = dhat, sig2_dhat = sig2_dhat,
-    lower = lower, upper = upper
+    lower = lower, upper = upper,
+    dhat_star = dhat_star, surv0_star = surv0_star, surv1_star = surv1_star,
+    c_alpha_band = c_alpha_band, sb_lower = sb_lower, sb_upper = sb_upper
   )
 }
 
@@ -289,7 +382,6 @@ KM_diff <- function(df, tte.name, event.name, treat.name, weight.name=NULL, at.p
 #' @return List with z-score, score, and variance.
 #' @export
 z_score_calculations <- function(nbar0, ybar0, nbar1, ybar1, rho = 0, gamma = 0, S_pool = NULL){
-
 w <- rep(1, length(nbar0))
 if( rho != 0.0 | gamma != 0.0){
   if(is.null(S_pool)){

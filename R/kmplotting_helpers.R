@@ -266,25 +266,36 @@ plotKM.band_subgroups <- function(
     sg_labels = NULL,
     ltype = "s", lty = 1, draws = 20, lwd = 2,
     sg_colors = NULL, color="lightgrey",
-    ymax.pad = 0.0, ymin.pad = 0.0,
+    ymax.pad = 0.01, ymin.pad = -0.01,
     taus = c(-Inf, Inf), yseq_length = 5, cex_Yaxis = 0.8, risk_cex = 0.8,
     by.risk = 6, risk.add = NULL, xmax = NULL, ymin = NULL, ymax = NULL, ymin.del = 0.035,
     y.risk1 = NULL, y.risk2 = NULL, ymin2 = NULL, risk_offset = NULL, risk.pad = 0.01,
     risk_delta = 0.0275, tau_add = NULL, time.zero.pad = 0, time.zero.label = 0.0,
-    xlabel = NULL, ylabel = NULL, Maxtau = NULL,
-    ylim = NULL
+    xlabel = NULL, ylabel = NULL, Maxtau = NULL, seedstart = 8316951,
+    ylim = NULL, draws.band = 20, qtau = 0.025, show_resamples = FALSE
 ) {
   # Input checks
+
+  required_cols <- c(tte.name, event.name, treat.name)
+  missing_cols <- setdiff(required_cols, names(df))
+  if (length(missing_cols) > 0) {
+    stop(paste("Missing required columns in df:", paste(missing_cols, collapse = ", ")))
+  }
+
   if (length(sg_labels) != length(sg_colors)) stop("SG labels and colors do not match")
   if (is.null(risk_offset)) risk_offset <- (1 + length(sg_labels)) * risk_delta
   if (is.null(ylabel)) ylabel <- expression(delta(t) == hat(S)[1](t) - hat(S)[0](t))
   if (is.null(xlabel)) xlabel <- "Months"
 
+  if (!is.numeric(df[[tte.name]])) stop("Time-to-event column must be numeric.")
+  if (!all(df[[event.name]] %in% c(0, 1))) stop("Event column must be binary (0/1).")
+  if (!all(df[[treat.name]] %in% c(0, 1))) stop("Treatment column must be binary (0/1).")
+
+
   # ITT
   Y <- df[[tte.name]]
   E <- df[[event.name]]
   Treat <- df[[treat.name]]
-
   maxe_0 <- max(Y[E == 1 & Treat == 0])
   maxe_1 <- max(Y[E == 1 & Treat == 1])
   max_tau <- min(c(maxe_0, maxe_1))
@@ -300,17 +311,23 @@ plotKM.band_subgroups <- function(
 
   fit <- KM_diff(
     df = df, tte.name = tte.name, event.name = event.name,
-    treat.name = treat.name, at.points = at.points, alpha = 0.05
+    treat.name = treat.name, at.points = at.points, alpha = 0.05, risk.points = riskpoints,
+    draws = draws, seedstart = seedstart, draws.band = draws.band, qtau = qtau, show_resamples = show_resamples
   )
-
-  xx0 <- fit$at.points
-  yy0 <- fit$dhat
-  l0 <- fit$lower
-  u0 <- fit$upper
+  at.points <- fit$at.points
+  dhat <- fit$dhat
+  # pointwise CIs
+  l0_pw <- fit$lower
+  u0_pw <- fit$upper
+  # simultaneous bands (draws.band > 0)
+  l0_sb <- fit$sb_lower
+  u0_sb <- fit$sb_upper
 
   risk.points <- round(seq(time.zero.label, max(at.points), by = by.risk))
   risk.points <- sort(unique(c(risk.points, risk.add)))
   risk.points <- c(time.zero.label - time.zero.pad, risk.points)
+
+  risk.points <- risk.points[which(risk.points <= max(fit$at.points))]
 
   # Total risk for ITT
   #risk0 <- vapply(risk.points, risk_weighted, numeric(1), y = Y)
@@ -321,49 +338,55 @@ plotKM.band_subgroups <- function(
   Rsg_mat <- NULL
   S0_mat <- NULL
   S1_mat <- NULL
-  if(length(sg_labels)>0){
-  Dsg_mat <- matrix(NA, nrow = length(xx0), ncol = length(sg_labels))
-  Rsg_mat <- matrix(NA, nrow = length(risk0), ncol = length(sg_labels))
-  S0_mat <- matrix(NA, nrow = length(xx0), ncol = length(sg_labels))
-  S1_mat <- matrix(NA, nrow = length(xx0), ncol = length(sg_labels))
 
-  for (sg in seq_along(sg_labels)) {
-    sg_flag <- sg_labels[sg]
-    df_sg <- subset(df, eval(parse(text = c(sg_flag))))
+  if(length(sg_labels)>0){
+  sg_flags <- lapply(sg_labels, function(expr) with(df, eval(parse(text = expr))))
+  # Preallocate matrices
+  Dsg_mat <- matrix(NA, nrow = length(at.points), ncol = length(sg_labels))
+  Rsg_mat <- matrix(NA, nrow = length(risk0), ncol = length(sg_labels))
+  S0_mat <- matrix(NA, nrow = length(at.points), ncol = length(sg_labels))
+  S1_mat <- matrix(NA, nrow = length(at.points), ncol = length(sg_labels))
+
+  # Here we only want point estimates (SE's not considered for subgroup plot)
+  for (i in seq_along(sg_flags)) {
+    #sg_flag <- sg_labels[sg]
+    #df_sg <- subset(df, eval(parse(text = c(sg_flag))))
+    df_sg <- df[sg_flags[[i]], ]
     Y_sg <- df_sg[[tte.name]]
     E_sg <- df_sg[[event.name]]
     Treat_sg <- df_sg[[treat.name]]
-
     res <- KM_diff(
       df = df_sg, tte.name = tte.name, event.name = event.name,
-      treat.name = treat.name, at.points = at.points, alpha = 0.05
+      treat.name = treat.name, at.points = at.points, alpha = 0.05, risk.points = risk.points,
+      draws = 0, draws.band = 0
     )
 
-    Dsg_mat[, sg] <- res$dhat
+    Dsg_mat[, i] <- res$dhat
     #rr <- vapply(risk.points, risk_weighted, numeric(1), y = Y_sg)
     rr <- colSums(outer(Y_sg, risk.points, FUN = ">="))
-    Rsg_mat[, sg] <- round(rr)
-    S0_mat[, sg] <- res$surv0
-    S1_mat[, sg] <- res$surv1
+    Rsg_mat[, i] <- round(rr)
+    S0_mat[, i] <- res$surv0
+    S1_mat[, i] <- res$surv1
   }
   }
-  x <- xx0
-  mean.value <- yy0
-  lower <- l0
-  upper <- u0
 
-  dhats_all <- yy0
+  x <- at.points
+  mean.value <- dhat
+  lower <- l0_pw
+  upper <- u0_pw
+
+  dhats_all <- dhat
   if(length(sg_labels)>0){
-  dhats_all <- cbind(yy0,Dsg_mat)
+  dhats_all <- cbind(dhat,Dsg_mat)
   }
 
-    if (is.null(ymax)) {
+  if (is.null(ymax)) {
     ymax <- max(dhats_all, na.rm = TRUE) + ymax.pad
-    ymax <- round(max(c(u0, ymax), na.rm = TRUE), 2)
+    ymax <- round(max(c(u0_pw, u0_sb, ymax), na.rm = TRUE), 2)
   }
   if (is.null(ymin)) {
     ymin <- min(dhats_all, na.rm = TRUE) - ymin.pad
-    ymin <- round(min(c(l0, ymin), na.rm = TRUE), 2)
+    ymin <- round(min(c(l0_pw, l0_sb,ymin), na.rm = TRUE), 2)
   }
   if (is.null(ymin2)) ymin2 <- ymin - risk_offset
 
@@ -376,25 +399,45 @@ plotKM.band_subgroups <- function(
     x[order(x)], mean.value[order(x)], type = "n", axes = FALSE, xlab = xlabel, lty = lty,
     ylab = ylabel, ylim = ylim, cex.lab = cex_Yaxis
   )
+  if(draws.band ==0){
   polygon(
     c(x[order(x)], rev(x[order(x)])),
-    c(lower[order(x)], rev(upper[order(x)])),
+    c(l0_pw[order(x)], rev(u0_pw[order(x)])),
     col = color, border = FALSE
   )
-  lines(x[order(x)], mean.value[order(x)], lty = lty, lwd = lwd, type = ltype)
+  }
 
+  if(draws.band > 0){
+    polygon(
+      c(x[order(x)], rev(x[order(x)])),
+      c(l0_sb[order(x)], rev(u0_sb[order(x)])),
+      col = color, border = FALSE
+    )
+  lines(x[order(x)], l0_pw[order(x)], lty=2, type="s")
+  lines(x[order(x)], u0_pw[order(x)], lty=2, type="s")
+  }
+
+  lines(x[order(x)], mean.value[order(x)], lty = lty, lwd = lwd, type = ltype)
   abline(h = ymin - ymin.del, lty = 1, col = "black")
   abline(h = time.zero.label, lty = 2, col = "black", lwd = 0.5)
 
   if(length(sg_labels)>0){
-  for (sg in seq_along(sg_labels)) {
-    lines(x, Dsg_mat[, sg], col = sg_colors[sg], type = ltype, lwd = lwd)
-  }
+
+    matplot(
+      x, Dsg_mat, type = ltype, lty = lty, lwd = lwd,
+      col = sg_colors, add = TRUE
+    )
+
+
   }
   if ((ymax - ymin2) <= 0.5) {
-    ypoints <- round(seq(ymin, ymax, length.out = yseq_length), 2)
+  d_minmax <- round((ymax-ymin)/10,2)
+  by_ypoints <- min(c(d_minmax, 0.2))
+  ypoints <- sort(c(time.zero.label, seq(ymin,ymax, by = by_ypoints)))
   } else {
-    ypoints <- seq(ymin, ymax, by = 0.15)
+    d_minmax <- round((ymax-ymin)/10,2)
+    by_ypoints <- min(c(d_minmax, 0.2))
+    ypoints <- seq(ymin, ymax, by = by_ypoints)
   }
   ypoints <- sort(c(time.zero.label, ypoints))
 
@@ -407,12 +450,12 @@ plotKM.band_subgroups <- function(
   text(risk.points, yrisks[1], risk0, col = "black", cex = risk_cex)
 
   if(length(sg_labels)>0){
-  for (sg in seq_along(sg_labels)) {
+   for (sg in seq_along(sg_labels)) {
     text(risk.points, yrisks[sg + 1], Rsg_mat[, sg], col = sg_colors[sg], cex = risk_cex)
   }
-  }
-  invisible(list(
-    xpoints = xx0, Dhat_subgroups = Dsg_mat, s0_subgroups = S0_mat, s1_subgroups = S1_mat,
+    }
+  invisible(list( fit_itt = fit,
+    xpoints = at.points, Dhat_subgroups = Dsg_mat, s0_subgroups = S0_mat, s1_subgroups = S1_mat,
     rpoints = risk.points, Risk_subgroups = Rsg_mat, mean = mean.value, lower = lower, upper = upper
   ))
 }
