@@ -1,6 +1,8 @@
 ---
 title: "Weighted KM Plots Examples"
-output: html_document
+output: 
+  html_document:
+  output_dir: "output"
 ---
 # Survival Analysis and KM Plotting 
 
@@ -101,8 +103,11 @@ Computes the weighted log-rank test statistic, its variance, the difference in s
 
 
 
-```{r}
+```{r, message = FALSE}
 library(survival)
+# to install weightedKMplots
+# library(devtools)
+# github_install("larry-leon/weightedKMplots")
 library(weightedKMplots)
 # source revised functions (to be updated in weightedKMplots)
 source("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/R/df_counting_improved.R")
@@ -112,27 +117,6 @@ source("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/wei
 library(survminer)
 ```
 ---- Data Preparation ----
-
-This will go with Cox stuff (just keeping here, for now)
-
-$$
-U(\beta) = \sum_{\text{event times}} \sum_{l=1}^{d} \left[ x_{i_l} - \frac{ \sum_{j \in R} x_j \exp(x_j \beta) - \frac{l-1}{d} \sum_{j \in D} x_j \exp(x_j \beta) }{ \sum_{j \in R} \exp(x_j \beta) - \frac{l-1}{d} \sum_{j \in D} \exp(x_j \beta) } \right]
-$$
-$$U(\beta) = \sum_{t} \sum_{l=1}^{d} \left[ X_{i_l} - \frac{S^{(1)}(\beta, t) - \frac{l-1}{d} S^{(1)}_D(\beta, t)}{S^{(0)}(\beta, t) - \frac{l-1}{d} S^{(0)}_D(\beta, t)} \right]
-$$
-where:
-
-$$ S^{(k)}(\beta, t) = \sum_{j} Y_j(t) X_j^k \exp(X_j^\top \beta) ) $$ 
-(risk set at time ( t ))
-
-$$ S^{(k)}_{D}(\beta, t) = \sum_{j \in D(t)} X_j^k \exp(X_j^\top \beta) )$$
-
-
-(event set at time ( t ))
-
-
-$$ U(\beta) = \sum_{i=1}^n \int_0^\tau \left[ X_i - \frac{S^{(1)}(\beta, t)}{S^{(0)}(\beta, t)} \right] dN_i(t) $$
-
 Prepare GBSG data
 ```{r}
 df_gbsg <- gbsg
@@ -158,8 +142,7 @@ with(temp,lr^2/sig2_lr)
 ```
 
 
-2. Stratified by grade
-Just for illustration
+2. Stratified by grade, just for illustration
 ```{r}
 res <- df_counting(df=df_gbsg, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, strata.name="grade")
 ```
