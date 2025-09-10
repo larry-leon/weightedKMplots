@@ -89,64 +89,6 @@ extract_group_data <- function(time, delta, wgt, z, group = 1) {
 #' @param at_points Numeric vector of time points
 #' @return List with ybar (risk set counts), nbar (event counts)
 #' @export
-calculate_risk_event_counts_old <- function(U, D, W, at_points, draws = 0, seedstart = 816951) {
-  ybar <- colSums(outer(U, at_points, FUN = ">=") * W)
-  nbar <- colSums(outer(U[D == 1], at_points, FUN = "<=") * W[D == 1])
-  dN <- diff(c(0, nbar))
-  # For un-weighted (all weights equal) return standard variance term
-  if(length(unique(W)) == 1){
-  # Greenwood
-  sig2w_multiplier <- ifelse(ybar > 0, dN / (ybar * (ybar-dN)), 0.0)
-  # Alternative with dN / (ybar^2)
-   }
-  if(length(unique(W)) > 1){
-  n <- length(U)
-  event_mat <- outer(U, at_points, FUN = "<=")
-  risk_mat  <- outer(U, at_points, FUN = ">=")
-  risk_w <- colSums(risk_mat *  W)
-
-  if(draws == 0){
-  counting <- colSums(event_mat * (D * W))
-  dN_w <- diff(c(0, counting))
-
-  # dLam_w <- ifelse(risk_w > 0, dN_w / risk_w, 0.0)
-  # a_w <- ifelse(risk_w > 0, 1 / risk_w, 0.0)
-  # sig2w_multiplier <- (a_w * (dN_w - risk_w * dLam_w))^2
-
-  dJ <- ifelse(risk_w == 1, 0, (dN_w - 1) / (risk_w - 1))
-  dL <- ifelse(risk_w == 0, 0, dN_w / risk_w)
-  h2 <- ifelse(risk_w > 0, (1 / (risk_w)), 0)
-
-  #sig2w_multiplier <- (h2 * (1 - dJ) * dL)
-
-  sig2w_multiplier <- (h2 * (dN_w - dL))^2
-  }
-
-  # Resampling
-  if(draws > 0){
-  set.seed(seedstart)
-  G.draws <- matrix(rnorm(draws * n), ncol = draws)
-  counting_star_all <- t(event_mat*  W) %*% (D * G.draws)
-  dN_star_all <- apply(counting_star_all, 2, function(x) diff(c(0, x)))
-  drisk_star <- sweep(dN_star_all, 1, risk_w, "/")
-  drisk_star[is.infinite(drisk_star) | is.nan(drisk_star)] <- 0
-  sig2w_multiplier <- apply(drisk_star,1,var)
-}
-}
-  list(ybar = ybar, nbar = nbar, sig2w_multiplier = sig2w_multiplier)
-}
-
-
-
-# Helper: Calculate Risk and Event Counts
-#' Calculate risk set and event counts at time points
-#'
-#' @param U Numeric vector of times for group
-#' @param D Numeric vector of event indicators for group
-#' @param W Numeric vector of weights for group
-#' @param at_points Numeric vector of time points
-#' @return List with ybar (risk set counts), nbar (event counts)
-#' @export
 calculate_risk_event_counts <- function(U, D, W, at_points, draws = 0, seedstart = 816951) {
   ybar <- colSums(outer(U, at_points, FUN = ">=") * W)
   nbar <- colSums(outer(U[D == 1], at_points, FUN = "<=") * W[D == 1])
@@ -267,7 +209,8 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
                         time.zero=0, tpoints.add=c(0),
                         by.risk=6, time.zero.label = 0.0, risk.add=NULL, get.cox=TRUE, cox.digits=2, lr.digits=2,
                         cox.eps = 0.001, lr.eps = 0.001, verbose = FALSE,
-                        qprob=0.5, rho = 0, gamma = 0, conf_level = 0.95, check.KM = TRUE, check.seKM = TRUE, draws = 0, seedstart = 8316951,
+                        qprob=0.5, rho = 0, gamma = 0, scheme = "fh",
+                        conf_level = 0.95, check.KM = TRUE, check.seKM = TRUE, draws = 0, seedstart = 8316951,
                         stop.onerror=FALSE,censoring_allmarks=TRUE) {
 
   validate_input(df, c(tte.name, event.name, treat.name, weight.name))
@@ -397,12 +340,6 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
   ans$riskpoints0 <- riskpoints0
 
   # Pooled KM estimates
-
-  # temp <- KM_estimates(ybar = ybar0 + ybar1, nbar = nbar0 + nbar1)
-  # survP <- temp$S_KM
-  # sig2_survP <- temp$sig2_KM
-  # rm("temp")
-
   risk_event <- calculate_risk_event_counts(time, delta, wgt, at_points)
   temp <- KM_estimates(ybar = risk_event$ybar, nbar = risk_event$nbar, sig2w_multiplier = risk_event$sig2w_multiplier)
   survP <- temp$S_KM
@@ -410,13 +347,13 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
   rm("temp")
 
   get_lr <- wlr_estimates(ybar0 = ybar0, ybar1 = ybar1, nbar0 = nbar0, nbar1 = nbar1,
-                          rho = rho, gamma = gamma, S_pool = survP)
+                          rho = rho, gamma = gamma, S_pool = survP, scheme = scheme)
   # Quantiles
   get_kmq <- km_quantile_table(at_points, surv0, se0 = sqrt(sig2_surv0), surv1, se1 = sqrt(sig2_surv1), arms,
                                qprob = qprob, type = c("midpoint"), conf_level = conf_level)
   ans$quantile_results <- get_kmq
 
-  get_score <- z_score_calculations(nbar0, ybar0, nbar1, ybar1, rho = rho, gamma = gamma, S_pool = survP)
+  get_score <- z_score_calculations(nbar0, ybar0, nbar1, ybar1, rho = rho, gamma = gamma, S_pool = survP, scheme = scheme)
   ans$z.score <- get_score$z.score
 
   # KM curve checks

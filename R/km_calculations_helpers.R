@@ -1,3 +1,109 @@
+#' Compute Time-Dependent Weights for Survival Analysis
+#'
+#' Calculates weights for use in weighted log-rank and related tests, supporting standard and custom schemes:
+#' Fleming-Harrington, Schemper, Xu & O'Quigley (XO), Maggir-Burman (MB), custom time-based, and exponential variants of Fleming-Harrington weights.
+#'
+#' @param S Numeric vector of survival probabilities (Kaplan-Meier curve).
+#' @param scheme Character string specifying weighting scheme. One of:
+#'   "fh" (Fleming-Harrington), "schemper", "XO", "MB", "custom_time", "fh_exp1", or "fh_exp2".
+#' @param rho Numeric weighting parameter (used for "fh").
+#' @param gamma Numeric weighting parameter (used for "fh").
+#' @param Scensor Optional numeric vector of censoring probabilities (for "schemper").
+#' @param Ybar Optional numeric vector of risk set sizes (for "XO").
+#' @param tpoints Optional numeric vector of time points (for "custom_time" and "MB").
+#' @param t.tau Optional time cutoff for "custom_time" weights.
+#' @param w0.tau, w1.tau Weights before/after t.tau (for "custom_time").
+#' @param mb_tstar Optional time for MB weights.
+#' @param details Logical; if TRUE, return detailed output.
+#'
+#' @return Numeric vector of weights (or list if details=TRUE).
+#'
+#' @details
+#' - "fh": Fleming-Harrington weights, requires `rho` and `gamma`.
+#' - "schemper": Schemper weights, requires `Scensor`.
+#' - "XO": Xu & O'Quigley weights, requires `Ybar`.
+#' - "MB": Maggir-Burman weights, requires `tpoints` and `mb_tstar`.
+#' - "custom_time": Custom time-based weights, requires `tpoints` and `t.tau`.
+#' - "fh_exp1": Exponential variant of FH weights.
+#' - "fh_exp2": Alternative exponential variant of FH weights.
+#'
+#' @examples
+#' # Fleming-Harrington weights
+#' wt.rg.S(S = surv, scheme = "fh", rho = 1, gamma = 1)
+#' # Schemper weights
+#' wt.rg.S(S = surv, scheme = "schemper", Scensor = censor_surv)
+#' # XO weights
+#' wt.rg.S(S = surv, scheme = "XO", Ybar = risk_set)
+#' # MB weights
+#' wt.rg.S(S = surv, scheme = "MB", tpoints = times, mb_tstar = 12)
+#' # Custom time-based weights
+#' wt.rg.S(S = surv, scheme = "custom_time", tpoints = times, t.tau = 6, w0.tau = 0, w1.tau = 1)
+#' # Exponential FH weights
+#' wt.rg.S(S = surv, scheme = "fh_exp1")
+#' wt.rg.S(S = surv, scheme = "fh_exp2")
+#'
+#' @export
+wt.rg.S <- function(
+    S,
+    scheme = c("fh", "schemper", "XO", "MB", "custom_time", "fh_exp1","fh_exp2"),
+    rho = NULL,
+    gamma = NULL,
+    Scensor = NULL,
+    Ybar = NULL,
+    tpoints = NULL,
+    t.tau = NULL,
+    w0.tau = 0,
+    w1.tau = 1,
+    mb_tstar = NULL,
+    details = FALSE
+) {
+  scheme <- match.arg(scheme)
+  n <- length(S)
+  if (!is.numeric(S) || n < 2) stop("S must be a numeric vector of survival probabilities (length >= 2).")
+  S_left <- c(1, S[-n])
+  wt <- rep(1, n)
+
+  if (scheme == "fh") {
+    if (is.null(rho) || is.null(gamma)) stop("For Fleming-Harrington weights, specify both rho and gamma.")
+    wt <- S_left^rho * (1 - S_left)^gamma
+  } else if (scheme == "schemper") {
+    if (is.null(Scensor) || length(Scensor) != n) stop("For Schemper weights, provide Scensor (censoring KM) of same length as S.")
+    Scensor_left <- c(1, Scensor[-n])
+    wt <- ifelse(Scensor_left > 0, S_left / Scensor_left, 0)
+  } else if (scheme == "XO") {
+    if (is.null(Ybar) || length(Ybar) != n) stop("For XO weights, provide Ybar (risk set sizes) of same length as S.")
+    wt <- ifelse(Ybar > 0, S_left / Ybar, 0)
+  } else if (scheme == "MB") {
+    if (is.null(tpoints) || length(tpoints) != n) stop("For MB weights, provide tpoints (time points) of same length as S.")
+    if (is.null(mb_tstar)) stop("For MB weights, provide mb_tstar (cutoff time).")
+    loc_tstar <- which.max(tpoints > mb_tstar)
+    Shat_tzero <- if (mb_tstar <= max(tpoints)) S_left[loc_tstar] else 0.0
+    mS <- pmax(S_left, Shat_tzero)
+    wt <- 1 / mS
+  } else if (scheme == "custom_time") {
+    if (is.null(tpoints) || length(tpoints) != n) stop("For custom_time weights, provide tpoints (time points) of same length as S.")
+    if (is.null(t.tau)) stop("For custom_time weights, provide t.tau (cutoff time).")
+    wt <- ifelse(tpoints <= t.tau, w0.tau, w1.tau)
+  } else if (scheme == "fh_exp1") {
+      wt <- exp(S_left^0.5 * (1 - S_left)^0.5)
+    } else if (scheme == "fh_exp2") {
+      wt05 <- exp(S_left^0.5 * (1 - S_left)^0.5)
+      wmax <- max(wt05)
+      wt01 <- (S_left^0) * (1 - S_left)^1
+      wt <- pmin(exp(wt01), wmax)
+    }
+   else {
+    stop("Unknown weighting scheme.")
+  }
+    if (details) {
+    return(list(weights = wt, S = S, S_left = S_left, Scensor = Scensor, Ybar = Ybar, tpoints = tpoints, scheme = scheme))
+  } else {
+    return(wt)
+  }
+}
+
+
+
 #' Format p-value for display
 #' @param pval Numeric p-value.
 #' @param eps Threshold for small p-values.
@@ -115,21 +221,8 @@ km_quantile_table <- function(time_points, surv0, se0, surv1, se1, arms = c("tre
   return(quantiles_df)
 }
 
-#' Kaplan-Meier estimates and Greenwood variance
-#' @param ybar Number at risk at each time.
-#' @param nbar Number of events at each time.
-#' @return List with survival and variance estimates.
-#' @export
-KM_estimates <- function(ybar, nbar, sig2w_multiplier = NULL){
-  dN <- diff(c(0, nbar))
-  dN_risk <- ifelse(ybar > 0, dN / ybar, 0.0)
-  S_KM <- cumprod(1 - dN_risk)
-  if(is.null(sig2w_multiplier)){
-  sig2w_multiplier  <- ifelse(ybar > 0 & ybar > dN, dN / (ybar * (ybar - dN)), 0.0)
-  }
-  var_KM <- (S_KM^2) * cumsum(sig2w_multiplier)
-  list(S_KM = S_KM, sig2_KM = var_KM)
-}
+
+
 
 #' Weighted log-rank estimates and variance
 #' @param ybar0 Number at risk in group 0.
@@ -140,7 +233,7 @@ KM_estimates <- function(ybar, nbar, sig2w_multiplier = NULL){
 #' @param gamma Weighting parameter.
 #' @return List with log-rank statistic and variance.
 #' @export
-wlr_estimates <- function(ybar0, ybar1, nbar0, nbar1, S_pool = NULL, rho = 0, gamma = 0) {
+wlr_estimates_old <- function(ybar0, ybar1, nbar0, nbar1, S_pool = NULL, rho = 0, gamma = 0) {
   dN_z0 <- diff(c(0, nbar0))
   dN_z1 <- diff(c(0, nbar1))
   dN_pooled <- dN_z0 + dN_z1
@@ -169,14 +262,97 @@ wlr_estimates <- function(ybar0, ybar1, nbar0, nbar1, S_pool = NULL, rho = 0, ga
   list(lr = lr, sig2 = sig2)
 }
 
+
+#' Weighted Log-Rank Test Statistic and Variance
+#'
+#' Computes the weighted log-rank test statistic and its variance for two groups, using flexible time-dependent weights.
+#' The weighting scheme is selected via the \code{scheme} argument and is calculated using \code{wt.rg.S}.
+#'
+#' @param ybar0 Numeric vector of risk set sizes for group 0.
+#' @param ybar1 Numeric vector of risk set sizes for group 1.
+#' @param nbar0 Numeric vector of event counts for group 0.
+#' @param nbar1 Numeric vector of event counts for group 1.
+#' @param S_pool Optional numeric vector of pooled survival probabilities (Kaplan-Meier). If NULL, calculated internally.
+#' @param rho Numeric weighting parameter (used for \"fh\" and \"custom_code\" schemes).
+#' @param gamma Numeric weighting parameter (used for \"fh\" and \"custom_code\" schemes).
+#' @param scheme Character string specifying weighting scheme. One of:
+#'   \"fh\" (Fleming-Harrington), \"schemper\", \"XO\", \"MB\", \"custom_time\", or \"custom_code\".
+#' @param Scensor Optional numeric vector of censoring probabilities (for \"schemper\" scheme).
+#' @param Ybar Optional numeric vector of risk set sizes (for \"XO\" scheme).
+#' @param tpoints Optional numeric vector of time points (for \"custom_time\" and \"MB\" schemes).
+#' @param t.tau Optional time cutoff for \"custom_time\" weights.
+#' @param w0.tau, w1.tau Weights before/after t.tau (for \"custom_time\" scheme).
+#' @param mb_tstar Optional time for MB weights.
+#'
+#' @return A list with elements:
+#'   \item{lr}{Weighted log-rank test statistic.}
+#'   \item{sig2}{Variance of the test statistic.}
+#'
+#' @details
+#' The weighting scheme is selected via the \code{scheme} argument and calculated using \code{wt.rg.S}.
+#' Supports standard Fleming-Harrington, Schemper, XO (Xu & O'Quigley), MB (Maggir-Burman), custom time-based, and custom code weights.
+#'
+#' @examples
+#' # Fleming-Harrington weights
+#' wlr_estimates(ybar0, ybar1, nbar0, nbar1, rho = 1, gamma = 1, scheme = \"fh\")
+#' # Schemper weights
+#' wlr_estimates(ybar0, ybar1, nbar0, nbar1, S_pool = S, Scensor = censor_S, scheme = \"schemper\")
+#' # XO weights
+#' wlr_estimates(ybar0, ybar1, nbar0, nbar1, S_pool = S, Ybar = risk_set, scheme = \"XO\")
+#' # MB weights
+#' wlr_estimates(ybar0, ybar1, nbar0, nbar1, S_pool = S, tpoints = times, mb_tstar = 12, scheme = \"MB\")
+#' # Custom time-based weights
+#' wlr_estimates(ybar0, ybar1, nbar0, nbar1, S_pool = S, tpoints = times, t.tau = 6, w0.tau = 0, w1.tau = 1, scheme = \"custom_time\")
+#'
+#' @export
+wlr_estimates <- function(ybar0, ybar1, nbar0, nbar1, S_pool = NULL, rho = 0, gamma = 0, scheme = "fh",
+                          Scensor = NULL, Ybar = NULL, tpoints = NULL, t.tau = NULL, w0.tau = 0, w1.tau = 1, mb_tstar = NULL) {
+  dN_z0 <- diff(c(0, nbar0))
+  dN_z1 <- diff(c(0, nbar1))
+  dN_pooled <- dN_z0 + dN_z1
+  risk_z1 <- ybar1
+  risk_z0 <- ybar0
+  risk_pooled <- risk_z0 + risk_z1
+  # Calculate S_pool if not provided
+  if (is.null(S_pool)) {
+    dN_Risk <- ifelse(risk_pooled > 0, dN_pooled / risk_pooled, 0)
+    S_pool <- cumprod(1 - dN_Risk)
+  }
+  # S_pool(t-) for weights implemented in wt.rg.S
+  # Use wt.rg.S for weights
+  w <- wt.rg.S(
+    S = S_pool,
+    scheme = scheme,
+    rho = rho,
+    gamma = gamma,
+    Scensor = Scensor,
+    Ybar = Ybar,
+    tpoints = tpoints,
+    t.tau = t.tau,
+    w0.tau = w0.tau,
+    w1.tau = w1.tau,
+    mb_tstar = mb_tstar
+  )
+  K <- ifelse(risk_pooled > 0, w * (risk_z0 * risk_z1) / risk_pooled, 0.0)
+  drisk0 <- sum(ifelse(risk_z0 > 0, (K / risk_z0) * dN_z0, 0.0))
+  drisk1 <- sum(ifelse(risk_z1 > 0, (K / risk_z1) * dN_z1, 0.0))
+  lr <- drisk0 - drisk1
+  h0 <- ifelse(risk_z0 == 0, 0, (K^2 / risk_z0))
+  h1 <- ifelse(risk_z1 == 0, 0, (K^2 / risk_z1))
+  dJ <- ifelse(risk_pooled == 1, 0, (dN_pooled - 1) / (risk_pooled - 1))
+  dL <- ifelse(risk_pooled == 0, 0, dN_pooled / risk_pooled)
+  sig2 <- sum((h0 + h1) * (1 - dJ) * dL)
+  list(lr = lr, sig2 = sig2)
+}
+
+
 #' Weighted log-rank and KM difference at tzero
 #' @param dfcounting Data frame with counting process columns.
 #' @param rho Weighting parameter.
-#' @param gamma Weighting parameter.
-#' @param tzero Time point for difference.
+#' @param gamma Weighting parameter.#' @param tzero Time point for difference.
 #' @return List with statistics, variances, covariance, and correlation.
 #' @export
-wlr_dhat_estimates <- function(dfcounting, rho = 0, gamma = 0, tzero = 24) {
+wlr_dhat_estimates_old <- function(dfcounting, rho = 0, gamma = 0, tzero = 24) {
   at_points <- dfcounting$at.points
   nbar0 <- dfcounting$nbar0
   nbar1 <- dfcounting$nbar1
@@ -222,15 +398,215 @@ wlr_dhat_estimates <- function(dfcounting, rho = 0, gamma = 0, tzero = 24) {
   )
 }
 
-#' KM difference at specified timepoints
-#' @param df Data frame with survival data.
-#' @param tte.name Name of time-to-event column.
-#' @param event.name Name of event indicator column.
-#' @param treat.name Name of treatment group column.
-#' @param weight.name Name of weights column (optional).
-#' @param at.points Time points for estimates.
-#' @param alpha Significance level.
-#' @return List with survival, difference, and CI estimates.
+#' Weighted Log-Rank and Difference Estimate at a Specified Time
+#'
+#' Computes the weighted log-rank statistic, its variance, the difference in survival at a specified time (`tzero`),
+#' the variance of the difference, their covariance, and correlation, using flexible time-dependent weights.
+#' The weighting scheme is selected via the \code{scheme} argument and is calculated using \code{wt.rg.S}.
+#'
+#' @param dfcounting List output from \code{df_counting} containing risk sets, event counts, and survival estimates.
+#' @param rho Numeric weighting parameter (used for \"fh\" and \"custom_code\" schemes).
+#' @param gamma Numeric weighting parameter (used for \"fh\" and \"custom_code\" schemes).
+#' @param tzero Time point at which to evaluate the difference in survival (default: 24).
+#' @param scheme Character string specifying weighting scheme. One of:
+#'   \"fh\" (Fleming-Harrington), \"schemper\", \"XO\", \"MB\", \"custom_time\", or \"custom_code\".
+#' @param Scensor Optional numeric vector of censoring probabilities (for \"schemper\" scheme).
+#' @param Ybar Optional numeric vector of risk set sizes (for \"XO\" scheme).
+#' @param tpoints Optional numeric vector of time points (for \"custom_time\" and \"MB\" schemes).
+#' @param t.tau Optional time cutoff for \"custom_time\" weights.
+#' @param w0.tau, w1.tau Weights before/after t.tau (for \"custom_time\" scheme).
+#' @param mb_tstar Optional time for MB weights.
+#'
+#' @return A list with elements:
+#'   \item{lr}{Weighted log-rank test statistic.}
+#'   \item{sig2_lr}{Variance of the log-rank statistic.}
+#'   \item{dhat}{Difference in survival at \code{tzero}.}
+#'   \item{cov_wlr_dhat}{Covariance between log-rank and difference at \code{tzero}.}
+#'   \item{sig2_dhat}{Variance of the difference at \code{tzero}.}
+#'   \item{cor_wlr_dhat}{Correlation between log-rank and difference at \code{tzero}.}
+#'
+#' @details
+#' The weighting scheme is selected via the \code{scheme} argument and calculated using \code{wt.rg.S}.
+#' Supports standard Fleming-Harrington, Schemper, XO (Xu & O'Quigley), MB (Maggir-Burman), custom time-based, and custom code weights.
+#'
+#' @examples
+#' # Fleming-Harrington weights
+#' wlr_dhat_estimates(dfcounting, rho = 1, gamma = 1, scheme = \"fh\")
+#' # Schemper weights
+#' wlr_dhat_estimates(dfcounting, Scensor = censor_S, scheme = \"schemper\")
+#' # XO weights
+#' wlr_dhat_estimates(dfcounting, Ybar = risk_set, scheme = \"XO\")
+#' # MB weights
+#' wlr_dhat_estimates(dfcounting, tpoints = times, mb_tstar = 12, scheme = \"MB\")
+#' # Custom time-based weights
+#' wlr_dhat_estimates(dfcounting, tpoints = times, t.tau = 6, w0.tau = 0, w1.tau = 1, scheme = \"custom_time\")
+#'
+#' @export
+wlr_dhat_estimates <- function(dfcounting,
+rho = 0, gamma = 0, tzero = 24, scheme = "fh",
+Scensor = NULL, Ybar = NULL, tpoints = NULL, t.tau = NULL, w0.tau = 0, w1.tau = 1, mb_tstar = NULL
+) {
+  at_points <- dfcounting$at.points
+  nbar0 <- dfcounting$nbar0
+  nbar1 <- dfcounting$nbar1
+  ybar0 <- dfcounting$ybar0
+  ybar1 <- dfcounting$ybar1
+  S1 <- dfcounting$surv1
+  S0 <- dfcounting$surv0
+  S_pool <- dfcounting$survP
+  loc_tzero <- which.max(at_points > tzero)
+  if (at_points[loc_tzero] <= tzero & at_points[loc_tzero + 1] > tzero) {
+    dhat_tzero <- S1[loc_tzero] - S0[loc_tzero]
+  } else {
+    dhat_tzero <- S1[loc_tzero - 1] - S0[loc_tzero - 1]
+  }
+  Sp_tzero <- S_pool[loc_tzero]
+  dN_z0 <- diff(c(0, nbar0))
+  dN_z1 <- diff(c(0, nbar1))
+  dN_pooled <- dN_z0 + dN_z1
+  risk_z1 <- ybar1
+  risk_z0 <- ybar0
+  risk_pooled <- risk_z0 + risk_z1
+
+  w <- wt.rg.S(
+    S = S_pool,
+    scheme = scheme,
+    rho = rho,
+    gamma = gamma,
+    Scensor = Scensor,
+    Ybar = Ybar,
+    tpoints = tpoints,
+    t.tau = t.tau,
+    w0.tau = w0.tau,
+    w1.tau = w1.tau,
+    mb_tstar = mb_tstar
+  )
+
+  K <- ifelse(risk_pooled > 0, w * (risk_z0 * risk_z1) / risk_pooled, 0.0)
+  drisk0 <- sum(ifelse(risk_z0 > 0, (K / risk_z0) * dN_z0, 0.0))
+  drisk1 <- sum(ifelse(risk_z1 > 0, (K / risk_z1) * dN_z1, 0.0))
+  lr <- drisk0 - drisk1
+  h0 <- ifelse(risk_z0 == 0, 0, (K^2 / risk_z0))
+  h1 <- ifelse(risk_z1 == 0, 0, (K^2 / risk_z1))
+  dJ <- ifelse(risk_pooled == 1, 0, (dN_pooled - 1) / (risk_pooled - 1))
+  dL <- ifelse(risk_pooled == 0, 0, dN_pooled / risk_pooled)
+  sig2_lr <- sum((h0 + h1) * (1 - dJ) * dL)
+  w_tzero <- w * ifelse(at_points <= tzero, 1, 0)
+  w_integral_t0 <- sum(w_tzero * (1 - dJ) * dL)
+  cov_wlr_dhat <- Sp_tzero * w_integral_t0
+  h2 <- ifelse(risk_z0 * risk_z1 > 0, (risk_pooled / (risk_z0 * risk_z1)), 0)
+  h2 <- h2 * ifelse(at_points <= tzero, 1, 0)
+  sig2_dhat <- (Sp_tzero^2) * sum(h2 * (1 - dJ) * dL)
+  # Correlation between log-rank statistic and dhat at time tzero
+  cor_wlr_dhat <- cov_wlr_dhat / (sqrt(sig2_lr) * sqrt(sig2_dhat))
+  list(
+    lr = lr, sig2_lr = sig2_lr, dhat = dhat_tzero,
+    cov_wlr_dhat = cov_wlr_dhat, sig2_dhat = sig2_dhat, cor_wlr_dhat = cor_wlr_dhat
+  )
+}
+
+
+#' Kaplan-Meier Survival Estimates and Variance
+#'
+#' Computes Kaplan-Meier survival estimates and their variances given risk and event counts.
+#'
+#' @param ybar Vector of risk set sizes at each time point.
+#' @param nbar Vector of event counts at each time point.
+#' @param sig2w_multiplier Optional vector for variance calculation. If NULL, calculated internally.
+#'
+#' @return A list with elements:
+#'   \item{S_KM}{Kaplan-Meier survival estimates.}
+#'   \item{sig2_KM}{Variance estimates for the survival curve.}
+#'
+#' @examples
+#' ybar <- c(10, 8, 6)
+#' nbar <- c(2, 2, 1)
+#' KM_estimates(ybar, nbar)
+#'
+#' @export
+KM_estimates <- function(ybar, nbar, sig2w_multiplier = NULL){
+  dN <- diff(c(0, nbar))
+  dN_risk <- ifelse(ybar > 0, dN / ybar, 0.0)
+  S_KM <- cumprod(1 - dN_risk)
+  if(is.null(sig2w_multiplier)){
+    sig2w_multiplier  <- ifelse(ybar > 0 & ybar > dN, dN / (ybar * (ybar - dN)), 0.0)
+  }
+  var_KM <- (S_KM^2) * cumsum(sig2w_multiplier)
+  list(S_KM = S_KM, sig2_KM = var_KM)
+}
+
+#' Event and Risk Matrices for Survival Analysis
+#'
+#' Constructs matrices indicating event and risk status for each subject at specified time points.
+#'
+#' @param U Vector of observed times (e.g., time-to-event).
+#' @param at.points Vector of time points at which to evaluate events and risk.
+#'
+#' @return A list with elements:
+#'   \item{event_mat}{Matrix indicating if event occurred by each time point.}
+#'   \item{risk_mat}{Matrix indicating if subject is at risk at each time point.}
+#'
+#' @examples
+#' U <- c(1, 2, 3)
+#' at.points <- c(1, 2, 3)
+#' get_event_risk_matrices(U, at.points)
+#'
+#' @export
+get_event_risk_matrices <- function(U, at.points) {
+  event_mat <- outer(U, at.points, FUN = "<=")
+  risk_mat  <- outer(U, at.points, FUN = ">=")
+  list(event_mat = event_mat, risk_mat = risk_mat)
+}
+
+
+
+#' Resampling Survival Curves for Confidence Bands
+#'
+#' Performs resampling to generate survival curves for a group, used for constructing confidence bands.
+#'
+#' @param U Vector of observed times.
+#' @param W Vector of weights.
+#' @param D Vector of event indicators (0/1).
+#' @param at.points Vector of time points for evaluation.
+#' @param draws.band Number of resampling draws.
+#' @param surv Vector of survival estimates.
+#' @param G_draws Matrix of random draws for resampling.
+#'
+#' @return Matrix of resampled survival curves.
+#'
+#' @export
+resampling_survival <- function(U, W, D, at.points, draws.band, surv, G_draws) {
+  mats <- get_event_risk_matrices(U, at.points)
+  risk_w <- colSums(mats$risk_mat * W)
+  counting_star_all <- t(mats$event_mat * W) %*% (D * G_draws)
+  dN_star_all <- apply(counting_star_all, 2, function(x) diff(c(0, x)))
+  drisk_star <- sweep(dN_star_all, 1, risk_w, "/")
+  drisk_star[is.infinite(drisk_star) | is.nan(drisk_star)] <- 0
+  surv_star <- (-1) * surv * apply(drisk_star, 2, cumsum)
+  return(surv_star)
+}
+
+#' Compare Kaplan-Meier Survival Between Two Groups
+#'
+#' Computes Kaplan-Meier survival curves for two groups, their difference, and confidence intervals (pointwise and simultaneous).
+#'
+#' @param df Data frame containing survival data.
+#' @param tte.name Name of the time-to-event column.
+#' @param event.name Name of the event indicator column (0/1).
+#' @param treat.name Name of the treatment group column (0/1).
+#' @param weight.name Optional name of the weights column.
+#' @param at.points Vector of time points for evaluation.
+#' @param alpha Significance level for confidence intervals.
+#' @param seedstart Random seed for resampling.
+#' @param draws Number of draws for resampling (not used if draws.band = 0).
+#' @param risk.points Vector of risk points for simultaneous bands.
+#' @param draws.band Number of draws for simultaneous confidence bands.
+#' @param tau.seq Step size for time grid in simultaneous bands.
+#' @param qtau Quantile for time range in simultaneous bands.
+#' @param show_resamples Logical; whether to plot resampled curves.
+#'
+#' @return A list containing survival estimates, variances, differences, confidence intervals, and (if requested) resampled curves and simultaneous bands.
+#'
 #' @export
 KM_diff <- function(df, tte.name, event.name, treat.name, weight.name=NULL, at.points = sort(df[[tte.name]]), alpha = 0.05, seedstart = 8316951, draws = 0,
                     risk.points, draws.band = 0, tau.seq = 0.25, qtau = 0.025, show_resamples = TRUE) {
@@ -309,62 +685,34 @@ KM_diff <- function(df, tte.name, event.name, treat.name, weight.name=NULL, at.p
   if(draws.band > 0){
   # draws > 0
   set.seed(seedstart)
-  # Control
+
+  # Control group
   n0 <- length(group_data0$U)
-  U <- group_data0$U
-  W <- group_data0$W
-  D <- group_data0$D
-  event_mat <- outer(U, at.points, FUN = "<=")
-  risk_mat  <- outer(U, at.points, FUN = ">=")
-  risk_w <- colSums(risk_mat *  W)
-
-   G0.draws <- matrix(rnorm(draws.band * n0), ncol = draws.band)
-   counting_star_all <- t(event_mat * W) %*% (D * G0.draws)
-   dN_star_all <- apply(counting_star_all, 2, function(x) diff(c(0, x)))
-   drisk_star <- sweep(dN_star_all, 1, risk_w, "/")
-   drisk_star[is.infinite(drisk_star) | is.nan(drisk_star)] <- 0
-   # (length(at.points) x draws.band) dimension
-   surv0_star <- (-1) * surv0 * apply(drisk_star, 2, cumsum)
-
-  # Treatment
+  G0.draws <- matrix(rnorm(draws.band * n0), ncol = draws.band)
+  surv0_star <- resampling_survival(group_data0$U, group_data0$W, group_data0$D, at.points, draws.band, surv0, G0.draws)
+  # Treatment group
   n1 <- length(group_data1$U)
-  U <- group_data1$U
-  W <- group_data1$W
-  D <- group_data1$D
-  event_mat <- outer(U, at.points, FUN = "<=")
-  risk_mat  <- outer(U, at.points, FUN = ">=")
-  risk_w <- colSums(risk_mat *  W)
   G1.draws <- matrix(rnorm(draws.band * n1), ncol = draws.band)
-  counting_star_all <- t(event_mat * W) %*% (D * G1.draws)
-  dN_star_all <- apply(counting_star_all, 2, function(x) diff(c(0, x)))
-  drisk_star <- sweep(dN_star_all, 1, risk_w, "/")
-  drisk_star[is.infinite(drisk_star) | is.nan(drisk_star)] <- 0
-  # (length(at.points) x draws.band) dimension
-  surv1_star <- (-1) * surv1 * apply(drisk_star, 2, cumsum)
+  surv1_star <- resampling_survival(group_data1$U, group_data1$W, group_data1$D, at.points, draws.band, surv1, G1.draws)
+
   dhat_star <- (surv1_star - surv0_star) / sqrt(sig2_dhat)
-
-  #print(dim(dhat_star))
-
   # simultaneous band
   sups <- apply(abs(dhat_star), 2, max, na.rm = TRUE)
   c_alpha_band <- quantile(sups,c(0.95))
 # Show first 20
 if(show_resamples){
-  matplot(at.points, dhat_star[,c(1:20)], type="s", xlab="time", ylab = "Survival differences (1st 20)", main = sprintf("c_alpha (simul. band): %.2f", c_alpha_band)
-          )
+    matplot(at.points, dhat_star[,c(1:20)], type="s", lty=2, lwd = 1, xlab="time", ylab = "Centered survival differences (1st 20)",
+      main = sprintf("c_alpha (simul. band): %.2f", c_alpha_band)
+    )
 }
-
   # simulataneous band
   sb_lower <- dhat - c_alpha_band * sqrt(sig2_dhat)
   sb_upper <- dhat + c_alpha_band * sqrt(sig2_dhat)
   }
-
-
- # Standard point-wise CIs
+  # Standard point-wise CIs
   c_alpha <- qnorm(1 - alpha / 2)
   lower <- dhat - c_alpha * sqrt(sig2_dhat)
   upper <- dhat + c_alpha * sqrt(sig2_dhat)
-
   list(
     at.points = at.points, surv0 = surv0, sig2_surv0 = sig2_surv0,
     surv1 = surv1, sig2_surv1 = sig2_surv1, dhat = dhat, sig2_dhat = sig2_dhat,
@@ -381,7 +729,7 @@ if(show_resamples){
 #' @param ybar1 Number at risk in group 1.
 #' @return List with z-score, score, and variance.
 #' @export
-z_score_calculations <- function(nbar0, ybar0, nbar1, ybar1, rho = 0, gamma = 0, S_pool = NULL){
+z_score_calculations_old <- function(nbar0, ybar0, nbar1, ybar1, rho = 0, gamma = 0, S_pool = NULL){
 w <- rep(1, length(nbar0))
 if( rho != 0.0 | gamma != 0.0){
   if(is.null(S_pool)){
@@ -395,7 +743,6 @@ if( rho != 0.0 | gamma != 0.0){
  if(!is.null(S_pool)) S_pool <- c(1, S_pool[-length(S_pool)])
  w <- (S_pool^rho) * ((1 - S_pool)^gamma)
 }
-
   # score test statistic
   dN.z1 <- diff(c(0, nbar1))
   dN.z0 <- diff(c(0, nbar0))
@@ -419,4 +766,90 @@ if( rho != 0.0 | gamma != 0.0){
   return(list(z.score=z.score, score=score, sig2.score=sig2U.bzero))
 }
 
-
+#' Weighted Z-Score Calculation for Survival Analysis
+#'
+#' Computes the weighted z-score and its variance for two groups, using flexible time-dependent weights.
+#' The weighting scheme is selected via the \code{scheme} argument and is calculated using \code{wt.rg.S}.
+#'
+#' @param nbar0 Numeric vector of event counts for group 0.
+#' @param ybar0 Numeric vector of risk set sizes for group 0.
+#' @param nbar1 Numeric vector of event counts for group 1.
+#' @param ybar1 Numeric vector of risk set sizes for group 1.
+#' @param S_pool Optional numeric vector of pooled survival probabilities (Kaplan-Meier). If NULL, calculated internally.
+#' @param rho Numeric weighting parameter (used for \"fh\" and \"custom_code\" schemes).
+#' @param gamma Numeric weighting parameter (used for \"fh\" and \"custom_code\" schemes).
+#' @param scheme Character string specifying weighting scheme. One of:
+#'   \"fh\" (Fleming-Harrington), \"schemper\", \"XO\", \"MB\", \"custom_time\", or \"custom_code\".
+#' @param Scensor Optional numeric vector of censoring probabilities (for \"schemper\" scheme).
+#' @param Ybar Optional numeric vector of risk set sizes (for \"XO\" scheme).
+#' @param tpoints Optional numeric vector of time points (for \"custom_time\" and \"MB\" schemes).
+#' @param t.tau Optional time cutoff for \"custom_time\" weights.
+#' @param w0.tau, w1.tau Weights before/after t.tau (for \"custom_time\" scheme).
+#' @param mb_tstar Optional time for MB weights.
+#'
+#' @return A list with elements:
+#'   \item{z.score}{Weighted z-score.}
+#'   \item{sig2.score}{Variance of the z-score.}
+#'
+#' @details
+#' The weighting scheme is selected via the \code{scheme} argument and calculated using \code{wt.rg.S}.
+#' Supports standard Fleming-Harrington, Schemper, XO (Xu & O'Quigley), MB (Maggir-Burman), custom time-based, and custom code weights.
+#'
+#' @examples
+#' # Fleming-Harrington weights
+#' z_score_calculations(nbar0, ybar0, nbar1, ybar1, rho = 1, gamma = 1, scheme = \"fh\")
+#' # Schemper weights
+#' z_score_calculations(nbar0, ybar0, nbar1, ybar1, S_pool = S, Scensor = censor_S, scheme = \"schemper\")
+#' # XO weights
+#' z_score_calculations(nbar0, ybar0, nbar1, ybar1, S_pool = S, Ybar = risk_set, scheme = \"XO\")
+#' # MB weights
+#' z_score_calculations(nbar0, ybar0, nbar1, ybar1, S_pool = S, tpoints = times, mb_tstar = 12, scheme = \"MB\")
+#' # Custom time-based weights
+#' z_score_calculations(nbar0, ybar0, nbar1, ybar1, S_pool = S, tpoints = times, t.tau = 6, w0.tau = 0, w1.tau = 1, scheme = \"custom_time\")
+#'
+#' @export
+z_score_calculations <- function(nbar0, ybar0, nbar1, ybar1, S_pool = NULL, rho = 0, gamma = 0, scheme = "fh",
+                                 Scensor = NULL, Ybar = NULL, tpoints = NULL, t.tau = NULL, w0.tau = 0, w1.tau = 1, mb_tstar = NULL) {
+  dN_z0 <- diff(c(0, nbar0))
+  dN_z1 <- diff(c(0, nbar1))
+  dN_pooled <- dN_z0 + dN_z1
+  risk_pooled <- ybar0 + ybar1
+  # Calculate S_pool if not provided
+  if (is.null(S_pool)) {
+    dN_Risk <- ifelse(risk_pooled > 0, dN_pooled / risk_pooled, 0)
+    S_pool <- cumprod(1 - dN_Risk)
+  }
+  # S_pool(t-) for weights implemented in wt.rg.S
+  # Use wt.rg.S for weights
+  w <- wt.rg.S(
+    S = S_pool,
+    scheme = scheme,
+    rho = rho,
+    gamma = gamma,
+    Scensor = Scensor,
+    Ybar = Ybar,
+    tpoints = tpoints,
+    t.tau = t.tau,
+    w0.tau = w0.tau,
+    w1.tau = w1.tau,
+    mb_tstar = mb_tstar
+  )
+  # score test statistic
+  num <- w * ybar1 * ybar0
+  den <- risk_pooled
+  K <- ifelse(den > 0, num / den, 0.0)
+  drisk1 <- ifelse(ybar1 > 0, dN_z1 / ybar1, 0.0)
+  drisk0 <- ifelse(ybar0 > 0, dN_z0 / ybar0, 0.0)
+  score <- sum(K * (drisk0 - drisk1))
+  i.bhat <- sum(ifelse(den > 0, (num / (den^2)) * dN_pooled, 0.0))
+  h1 <- ifelse(ybar1 > 0, (K^2 / ybar1), 0.0)
+  h2 <- ifelse(ybar0 > 0, (K^2 / ybar0), 0.0)
+  temp <- c(den - 1)
+  ybar_mod <- ifelse(temp < 1, 1, temp)
+  dH1 <- ifelse(ybar_mod > 0, (dN_pooled-1) / ybar_mod, 0.0)
+  dH2 <- ifelse(den > 0, dN_pooled / den, 0.0)
+  sig2s <- (h1+h2)*(1-dH1)*dH2
+  sig2U.bzero <- sum(sig2s)
+  z.score <- score / sqrt(sig2U.bzero)
+  return(list(z.score=z.score, score=score, sig2.score=sig2U.bzero))
+  }

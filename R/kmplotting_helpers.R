@@ -177,16 +177,66 @@ add_legends <- function(dfcount, show.cox, cox.cex, put.legend.cox, show.logrank
 }
 
 
-#' Kaplan-Meier Plot for Two Samples with Weighted Counting
+#' Plot Weighted Kaplan-Meier Curves for Two Samples (Counting Process Format)
 #'
-#' Plots Kaplan-Meier survival curves for two samples using weighted counting.
-#' Optionally displays Cox proportional hazards results and log-rank test statistics.
+#' Plots Kaplan-Meier survival curves for two groups (e.g., treatment and control) using precomputed
+#' risk/event counts and survival estimates in counting process format. Optionally displays confidence intervals,
+#' risk tables, median survival annotations, and statistical test results (Cox, log-rank).
 #'
-#' @param dfcount Data frame containing survival data. Must include columns for time, status, group, and weights.
-#' @param show.cox Logical; if TRUE, displays Cox proportional hazards results on the plot.
-#' @param cox.cex Numeric; character expansion factor for Cox results text.
-#' @param show.logrank Logical; if TRUE, displays log-rank test statistics on the plot.
-#' @return A plot is produced. No return value.
+#' @param dfcount List containing precomputed survival data (see Details).
+#' @param show.cox Logical; whether to display Cox model results (default: FALSE).
+#' @param cox.cex Text size for Cox model annotation.
+#' @param show.logrank Logical; whether to display log-rank test results (default: FALSE).
+#' @param logrank.cex Text size for log-rank annotation.
+#' @param cox.eps, lr.eps Small values for Cox/log-rank calculations.
+#' @param show_arm_legend Logical; whether to show arm legend.
+#' @param arms Character vector of arm labels.
+#' @param put.legend.arms, put.legend.cox, put.legend.lr Legend positions.
+#' @param stop.onerror Logical; whether to stop on KM curve errors.
+#' @param check.KM Logical; whether to check KM curve validity.
+#' @param lr.digits, cox.digits Number of digits for test results.
+#' @param tpoints.add Additional time points for risk table.
+#' @param by.risk Interval for risk table time points.
+#' @param Xlab, Ylab Axis labels.
+#' @param col.0, col.1 Colors for control and treatment curves.
+#' @param show.med Logical; whether to annotate median survival.
+#' @param med.digits, med.font, med.cex, ymed.offset, xmed.fraction Median annotation settings.
+#' @param conf.int Logical; whether to plot confidence intervals.
+#' @param conf_level Confidence level for intervals.
+#' @param choose_ylim Logical; whether to auto-select y-axis limits.
+#' @param arm.cex Text size for arm legend.
+#' @param quant, qlabel Quantile and label for annotation.
+#' @param risk.cex Text size for risk table.
+#' @param plotit Logical; whether to plot (default: TRUE).
+#' @param ltys, lwds Line types and widths for curves.
+#' @param censor.mark.all Logical; whether to mark all censored times.
+#' @param censor.cex Size of censor marks.
+#' @param show.ticks Logical; whether to show axis ticks.
+#' @param risk.set Logical; whether to display risk table.
+#' @param ymin, ymax, ymin.del, ymin2, risk_offset, risk_delta, y.risk0, y.risk1, show.Y.axis, cex_Yaxis, add.segment, risk.add, xmin, xmax, x.truncate, time.zero, prob.points Additional graphical and calculation parameters.
+#'
+#' @details
+#' The \code{dfcount} list must contain the following elements:
+#' \itemize{
+#'   \item at.points: Time points for evaluation.
+#'   \item risk.points: Time points for risk table.
+#'   \item risk.points.label: Labels for risk table time points.
+#'   \item idv0, idv1: Individual IDs for control and treatment.
+#'   \item surv0, surv1: Survival estimates for control and treatment.
+#'   \item sig2_surv0, sig2_surv1: Variances of survival estimates.
+#'   \item idx0, idx1: Indices for control and treatment.
+#'   \item cens0, cens1: Censoring indicators.
+#'   \item riskpoints0, riskpoints1: Risk set counts for control and treatment.
+#' }
+#' Optionally, \code{quantile_results} for median annotation.
+#'
+#' The function plots survival curves, confidence intervals, risk tables, and (optionally) statistical test results and median survival.
+#'
+#' @return Invisibly returns NULL. Used for plotting side effects.
+#'
+#' @examples
+#' KM_plot_2sample_weighted_counting(dfcount = my_dfcount, show.cox = TRUE, show.logrank = TRUE)
+#'
 #' @export
 KM_plot_2sample_weighted_counting <- function(
     dfcount, show.cox = FALSE, cox.cex = 0.725, show.logrank = FALSE,
@@ -257,12 +307,67 @@ KM_plot_2sample_weighted_counting <- function(
 }
 
 
-
-
-#' KM plotting for subgroups
+#' Plot Kaplan-Meier Survival Difference Curves with Subgroups and Confidence Bands
+#'
+#' Plots the difference in Kaplan-Meier survival curves between two groups (e.g., treatment vs. control),
+#' optionally including simultaneous confidence bands and subgroup curves. Also displays risk tables for
+#' the overall population and specified subgroups.
+#'
+#' @param df Data frame containing survival data.
+#' @param tte.name Name of the time-to-event column.
+#' @param event.name Name of the event indicator column (0/1).
+#' @param treat.name Name of the treatment group column (0/1).
+#' @param weight.name Optional name of the weights column.
+#' @param sg_labels Character vector of subgroup definitions (as logical expressions).
+#' @param ltype Line type for curves (default: \"s\").
+#' @param lty Line style for curves (default: 1).
+#' @param draws Number of draws for resampling (default: 20).
+#' @param lwd Line width for curves (default: 2).
+#' @param sg_colors Colors for subgroup curves.
+#' @param color Color for confidence band polygon (default: \"lightgrey\").
+#' @param ymax.pad, ymin.pad Padding for y-axis limits.
+#' @param taus Vector for time truncation (default: c(-Inf, Inf)).
+#' @param yseq_length Number of y-axis ticks (default: 5).
+#' @param cex_Yaxis, risk_cex Text size for axis and risk table.
+#' @param by.risk Interval for risk table time points (default: 6).
+#' @param risk.add Additional time points for risk table.
+#' @param xmax, ymin, ymax, ymin.del, y.risk1, y.risk2, ymin2, risk_offset, risk.pad, risk_delta, tau_add, time.zero.pad, time.zero.label, xlabel, ylabel, Maxtau, seedstart, ylim Additional graphical and calculation parameters.
+#' @param draws.band Number of draws for simultaneous confidence bands (default: 20).
+#' @param qtau Quantile for time range in simultaneous bands (default: 0.025).
+#' @param show_resamples Logical; whether to plot resampled curves (default: FALSE).
+#'
+#' @return (Invisible) list containing:
+#'   \item{fit_itt}{KM_diff results for the full population.}
+#'   \item{xpoints}{Time points used.}
+#'   \item{Dhat_subgroups}{Difference curves for subgroups.}
+#'   \item{s0_subgroups}{Survival curves for control in subgroups.}
+#'   \item{s1_subgroups}{Survival curves for treatment in subgroups.}
+#'   \item{rpoints}{Risk table time points.}
+#'   \item{Risk_subgroups}{Risk table counts for subgroups.}
+#'   \item{mean}{Main difference curve.}
+#'   \item{lower}{Lower confidence interval.}
+#'   \item{upper}{Upper confidence interval.}
+#'
+#' @details
+#' Uses \code{KM_diff} to compute survival differences and confidence intervals. Plots the main difference curve,
+#' confidence bands, and subgroup curves. Displays risk tables for the overall population and subgroups.
+#' Handles simultaneous confidence bands if \code{draws.band > 0}.
+#'
+#' @examples
+#' plotKM.band_subgroups(
+#'   df = mydata,
+#'   tte.name = \"time\",
+#'   event.name = \"status\",
+#'   treat.name = \"group\",
+#'   weight.name = \"weights\",
+#'   sg_labels = c(\"age > 65\", \"sex == 'F'\"),
+#'   sg_colors = c(\"red\", \"blue\"),
+#'   draws.band = 1000
+#' )
+#'
 #' @export
 plotKM.band_subgroups <- function(
-    df, tte.name, event.name, treat.name,
+    df, tte.name, event.name, treat.name, weight.name = NULL,
     sg_labels = NULL,
     ltype = "s", lty = 1, draws = 20, lwd = 2,
     sg_colors = NULL, color="lightgrey",
@@ -276,7 +381,7 @@ plotKM.band_subgroups <- function(
 ) {
   # Input checks
 
-  required_cols <- c(tte.name, event.name, treat.name)
+  required_cols <- c(tte.name, event.name, treat.name, weight.name)
   missing_cols <- setdiff(required_cols, names(df))
   if (length(missing_cols) > 0) {
     stop(paste("Missing required columns in df:", paste(missing_cols, collapse = ", ")))
@@ -290,6 +395,7 @@ plotKM.band_subgroups <- function(
   if (!is.numeric(df[[tte.name]])) stop("Time-to-event column must be numeric.")
   if (!all(df[[event.name]] %in% c(0, 1))) stop("Event column must be binary (0/1).")
   if (!all(df[[treat.name]] %in% c(0, 1))) stop("Treatment column must be binary (0/1).")
+  if (!is.null(weight.name) && !all(df[[weight.name]] >= 0)) stop("Weights must be non-negative.")
 
 
   # ITT
@@ -307,10 +413,10 @@ plotKM.band_subgroups <- function(
 
   # Truncate the observed timepoints at max_tau
   atpoints <- Y[Y <= max_tau]
-  at.points <- sort(unique(c(atpoints, max_tau, riskpoints)))
+  at.points <- sort(unique(c(atpoints, max_tau, tau_add, riskpoints)))
 
   fit <- KM_diff(
-    df = df, tte.name = tte.name, event.name = event.name,
+    df = df, tte.name = tte.name, event.name = event.name, weight.name = weight.name,
     treat.name = treat.name, at.points = at.points, alpha = 0.05, risk.points = riskpoints,
     draws = draws, seedstart = seedstart, draws.band = draws.band, qtau = qtau, show_resamples = show_resamples
   )
@@ -330,7 +436,6 @@ plotKM.band_subgroups <- function(
   risk.points <- risk.points[which(risk.points <= max(fit$at.points))]
 
   # Total risk for ITT
-  #risk0 <- vapply(risk.points, risk_weighted, numeric(1), y = Y)
   risk0 <- colSums(outer(Y, risk.points, FUN = ">="))
   risk0 <- round(risk0)
   # Subgroups (SG) defined by sg_labels
@@ -349,20 +454,17 @@ plotKM.band_subgroups <- function(
 
   # Here we only want point estimates (SE's not considered for subgroup plot)
   for (i in seq_along(sg_flags)) {
-    #sg_flag <- sg_labels[sg]
-    #df_sg <- subset(df, eval(parse(text = c(sg_flag))))
     df_sg <- df[sg_flags[[i]], ]
     Y_sg <- df_sg[[tte.name]]
     E_sg <- df_sg[[event.name]]
     Treat_sg <- df_sg[[treat.name]]
     res <- KM_diff(
-      df = df_sg, tte.name = tte.name, event.name = event.name,
+      df = df_sg, tte.name = tte.name, event.name = event.name, weight.name = weight.name,
       treat.name = treat.name, at.points = at.points, alpha = 0.05, risk.points = risk.points,
       draws = 0, draws.band = 0
     )
 
     Dsg_mat[, i] <- res$dhat
-    #rr <- vapply(risk.points, risk_weighted, numeric(1), y = Y_sg)
     rr <- colSums(outer(Y_sg, risk.points, FUN = ">="))
     Rsg_mat[, i] <- round(rr)
     S0_mat[, i] <- res$surv0
