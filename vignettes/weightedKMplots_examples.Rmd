@@ -1,8 +1,6 @@
 ---
 title: "Weighted KM Plots Examples"
-output: 
-  html_document:
-  output_dir: "output"
+output: html_document
 ---
 # Survival Analysis and KM Plotting 
 
@@ -104,6 +102,7 @@ Computes the weighted log-rank test statistic, its variance, the difference in s
 
 
 ```{r, message = FALSE}
+library(tinytex)
 library(survival)
 # to install weightedKMplots
 # library(devtools)
@@ -129,98 +128,43 @@ arms <- c("treat", "control")
 ```
 ---- Main Analyses ----
 
-1. GBSG - ITT Analysis
+GBSG - ITT Analysis
 ```{r}
-dfcount_gbsg <- df_counting(df=df_gbsg, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, by.risk = 12)
-```
-check log-rank statistics
-```{r}
-check_results(dfcount_gbsg)
-# Check wlr_dhat
-temp <- wlr_dhat_estimates(dfcounting = dfcount_gbsg, rho = 0, gamma = 0, scheme = "fh")
-with(temp,lr^2/sig2_lr)
-```
-
-
-2. Stratified by grade, just for illustration
-```{r}
-res <- df_counting(df=df_gbsg, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, strata.name="grade")
-```
-stratified
-```{r}
-with(res,lr_stratified^2/sig2_lr_stratified)
-```
-non-stratified (should be same as above)
-```{r}
-with(res,lr^2/sig2_lr)
-```
-survdiff stratified
-```{r}
-res$logrank_results$chisq
-```
-non-stratified
-```{r}
-with(res,z.score^2)
-```
-stratified
-```{r}
-with(res,z.score_stratified^2)
-
-```
-3. Subgroup Analyses (meno)
-```{r}
-for (meno_val in c(0, 1)) {
-  df_sg <- subset(df_gbsg, meno == meno_val)
-  sg_res <- get_dfcounting(df=df_sg, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms)
-  check_results(sg_res)
-}
-
-```
-4. Add duplicate subject (pid==51) for testing
-```{r}
-df_add <- subset(df_gbsg, pid == 51)
-df_add$status <- 1.0
-df_mod <- rbind(df_gbsg, df_add)
-dfcount_mod <- get_dfcounting(df=df_mod, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms)
-check_results(dfcount_mod)
-
+dfcount_gbsg <- df_counting(df=df_gbsg, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, by.risk = 12, scheme = "fh", lr.digits = 4, cox.digits =3)
 ```
 
 ---- Plotting ----
-
-
 GBSG KM plots
-```{r, fig.width = 8, fig.height=6}
+```{r, fig.width = 10, fig.height=6}
 par(mfrow=c(1,2))
 # Mine
-plot_weighted_km(dfcount=dfcount_gbsg, conf.int=FALSE)
+# Set ymax a little above 1.0 to allow for logrank placement in topleft
+# topleft is default; xmed.fraction = 0.65 positions the display of the median estimates below the HR estimates ("topright" legend [default])
+# For details, please see summary of xmed.fraction in the Appendix below.
+plot_weighted_km(dfcount=dfcount_gbsg, conf.int=FALSE, show.logrank = TRUE, put.legend.lr = "topleft", ymax = 1.05, xmed.fraction = 0.65)
+title(main="GBSG (trial) data un-weighted")
 # Compare with survfit
 plot_km(df=df_gbsg, tte.name=tte.name, event.name=event.name, treat.name=treat.name)
+title(main="GBSG (trial) data un-weighted
+      via survfit")
 ```
 
 Compare with survminer
 
 ```{r, fig.width = 8, fig.height=6}
+plot_weighted_km(dfcount=dfcount_gbsg, conf.int=TRUE, show.logrank = TRUE, ymax = 1.05)
+title(main="GBSG (trial) data un-weighted")
 
-plot_weighted_km(dfcount=dfcount_gbsg, conf.int=TRUE)
+```
 
+
+
+```{r, fig.width = 8, fig.height=6, eval=FALSE}
 km_fit <- survfit(Surv(time_months,status) ~ hormon, data=df_gbsg)
 ggsurvplot(km_fit,conf.int=TRUE, risk.table = TRUE, break.time.by=12, xlim=c(0,86),
-           tables.height = 0.2,tables.theme = theme_cleantable(),censor=TRUE)
-
+           tables.height = 0.2, tables.theme = theme_cleantable(), censor=TRUE, main = "GBSG (trial) data un-weighted")
 ```
 
-
-
-
-For modified data
-```{r, fig.width = 8, fig.height=6}
-par(mfrow=c(1,2))
-plot_weighted_km(dfcount_mod)
-plot_km(df=df_mod, tte.name=tte.name, event.name=event.name, treat.name=treat.name)
-
-
-```
 
 ---- Propensity Score Weighting (Rotterdam) ----
 
@@ -240,17 +184,10 @@ gbsg_validate <- within(rotterdam, {
   id <- as.numeric(1:nrow(rotterdam))
   SG0 <- ifelse(er <= 0, 0, 1)
 })
-
-tte.name <- "time_months"
-event.name <- "status"
-treat.name <- "treat"
-wt.name <- "sw.weights"
-
 ```
 Node positive only to correspond to GBSG population
 ```{r}
 df_rotterdam <- subset(gbsg_validate, nodes > 0)
-
 ```
 Propensity score model
 ```{r}
@@ -264,40 +201,40 @@ df_rotterdam$sw.weights <- ifelse(df_rotterdam$treat == 1, wt.1, wt.0)
 df_rotterdam$sw.weights_trunc <- with(df_rotterdam, pmin(pmax(sw.weights, quantile(sw.weights, 0.05)), quantile(sw.weights, 0.95)))
 
 ```
-Weighted and unweighted analyses
+Un-weighted and weighted analyses
 ```{r}
 dfcount_rotterdam_unwtd <- get_dfcounting(df=df_rotterdam, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, by.risk=24)
-```
 
-
-```{r}
 dfcount_rotterdam_wtd <- get_dfcounting(df=df_rotterdam, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, by.risk=24, 
-                                  weight.name="sw.weights", check.KM = TRUE, draws = 0)
+                                  weight.name="sw.weights")
 ```
-
-```{r}
-dfcount_rotterdam_wtd <- get_dfcounting(df=df_rotterdam, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, by.risk=24, 
-                                  weight.name="sw.weights", check.KM=TRUE, draws = 5000)
-```
-
-
-
 
 ---- Plotting Weighted vs Unweighted ----
 
 ```{r, fig.width = 10, fig.height=6}
 par(mfrow=c(1,2))
-plot_weighted_km(dfcount=dfcount_rotterdam_unwtd)
-plot_weighted_km(dfcount=dfcount_rotterdam_wtd)
+plot_weighted_km(dfcount=dfcount_rotterdam_unwtd, xmed.fraction = 0.65)
+title(main="Rotterdam un-weighted K-M curves")
+plot_weighted_km(dfcount=dfcount_rotterdam_wtd, xmed.fraction = 0.65)
+title(main="Rotterdam weighted K-M curves")
 
 ```
 Compare with GBSG trial data
 ```{r, fig.width = 10, fig.height=6}
 par(mfrow=c(1,2))
-plot_weighted_km(dfcount=dfcount_gbsg, conf.int = TRUE)
-plot_weighted_km(dfcount=dfcount_rotterdam_wtd, conf.int = TRUE)
-
+plot_weighted_km(dfcount=dfcount_gbsg, conf.int = TRUE, xmed.fraction = 0.65, show.logrank = TRUE, ymax = 1.05)
+title(main="GBSG (trial) data un-weighted K-M curves")
+plot_weighted_km(dfcount=dfcount_rotterdam_wtd, conf.int = TRUE, xmed.fraction = 0.65, show.logrank = TRUE, ymax = 1.05)
+title(main="Rotterdam weighted K-M curves")
 ```
+
+
+
+# Simultaneous bands and point-wise CIs
+
+Note that the first graph displays 20 (1st 20) resampled approximations to the centered survival difference 
+
+$\Delta(t) = (\widehat{S_1} - \widehat{S_0})(t) - (S_{1} - S_{0})(t)),$ for timepoints $t$ within "qtau" quartiles of the event times (i.e., for qtau = 2.5\% we calculate $\Delta$ for time points within the 2.5\% and 97.5\% quantiles).
 
 ---- Simultaneous CI bands ----
 ```{r, fig.width = 12, fig.height=6}
@@ -366,9 +303,6 @@ par(mfrow=c(1,2))
 ```
 
 
-
-
-
 Rotterdam data example with propensity score weighting 
 
 ---- Simultaneous CI bands ----
@@ -384,10 +318,131 @@ par(mfrow=c(1,2))
   )
    legend("topleft", c("Difference estimate", "95% pointwise CIs"),
    lwd=c(2,1), col=c("black"), lty=c(1,2), bty="n", cex=0.75)
-  title(main="ITT population")
+   title(main="ITT population weighted")
  
 
 ```
+
+# Some checks on results
+
+
+
+## Check weighted K-M SE's with survfit
+```{r}
+dfcount_rotterdam_wtd <- get_dfcounting(df=df_rotterdam, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, by.risk=24, 
+                                  weight.name="sw.weights", check.seKM = TRUE, draws = 0)
+```
+
+## Check SE's calculated via resampling (draws = 5000) 
+
+Note that draws = 5000 does not take much time, but can be reduced to around 500 for sufficient accuracy.
+
+```{r}
+dfcount_rotterdam_wtd <- get_dfcounting(df=df_rotterdam, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, by.risk=24, 
+                                  weight.name="sw.weights", check.seKM = TRUE, draws = 5000)
+```
+
+## Compare with the adjustedCurves package
+```{r}
+# Compare with adjustedCurves
+library(adjustedCurves)
+library(pammtools)
+
+df_rotterdam$hormon2 <- with(df_rotterdam, factor(hormon, labels=c("No","Yes")))
+
+ps_model <- glm(hormon2 ~ age+meno+size+grade+nodes+pgr+chemo+er, data = df_rotterdam, family="binomial")
+
+iptw <- adjustedsurv(data=df_rotterdam, variable="hormon2", ev_time="time_months", event = "status", method = "iptw_km", treatment_model = ps_model, conf_int = TRUE)
+
+```
+
+```{r, fig.width = 8, fig.height = 6}
+plot_weighted_km(dfcount=dfcount_rotterdam_wtd, conf.int = TRUE)
+ title(main="Rotterdam weighted K-M curves")
+```
+
+```{r, fig.width = 8, fig.height = 6}
+ plot(iptw, conf_int = TRUE, legend.title = "Hormonal therapy")
+```
+
+
+## Compare SE's with adjustedCurves package
+```{r, fig.width = 12, fig.height = 6}
+# Check SEs
+par(mfrow=c(1,2))
+
+df_mine <- dfcount_rotterdam_wtd
+
+df_check <- subset(iptw$adj, group == "No")
+yymax <- max(c(sqrt(df_mine$sig2_surv0[df_mine$idv0.check]), df_check$se))
+toget <- df_mine$idv0.check
+tt <- df_mine$at.points[toget]
+yy <- sqrt(df_mine$sig2_surv0)[toget]
+plot(tt,yy, type="s", lty=1, col="lightgrey", lwd=4, ylim=c(0,yymax), xlab="time", ylab="SEs")
+with(df_check, lines(time, se, type="s", lty=2, lwd=1, col="red"))
+title(main="Control SEs")
+
+
+df_check <- subset(iptw$adj, group == "Yes")
+yymax <- max(c(sqrt(df_mine$sig2_surv1[df_mine$idv1.check]), df_check$se))
+toget <- df_mine$idv1.check
+tt <- df_mine$at.points[toget]
+yy <- sqrt(df_mine$sig2_surv1)[toget]
+plot(tt,yy, type="s", lty=1, col="lightgrey", lwd=4, ylim=c(0,yymax), xlab="time", ylab="SEs")
+with(df_check, lines(time, se, type="s", lty=2, lwd=1, col="red"))
+title(main = "Treat SEs")
+
+```
+
+## Check log-rank statistics
+
+```{r}
+# dfcount_gbsg contains logrank (chisq) stats from specified scheme (default is standard logrank rho=0 and gamma=0) from 3 sources:
+# (1) wlr_estimates function 
+# (2) survdiff which only provides rho options so gamma !=0 is not available
+# (3) z_score_calculations function (from a Cox score-test perspective)
+check_results(dfcount_gbsg)
+# Check wlr_dhat_estimates which calculates from any scheme based on counting dataset 
+temp <- wlr_dhat_estimates(dfcounting = dfcount_gbsg, rho = 0, gamma = 0, scheme = "fh")
+with(temp,lr^2/sig2_lr)
+```
+
+
+2. Stratified by grade, just for illustration
+```{r}
+res <- df_counting(df=df_gbsg, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, strata.name="grade")
+```
+stratified
+```{r}
+with(res,lr_stratified^2/sig2_lr_stratified)
+# survdiff stratified
+res$logrank_results$chisq
+ # Cox score stratified
+with(res,z.score_stratified^2)
+```
+non-stratified (should be same as above results without stratification)
+```{r}
+with(res,lr^2/sig2_lr)
+with(res,z.score^2)
+```
+
+
+Add duplicate subject (pid==51) for testing how plots mark ties
+```{r}
+df_add <- subset(df_gbsg, pid == 51)
+df_add$status <- 1.0
+df_mod <- rbind(df_gbsg, df_add)
+dfcount_mod <- get_dfcounting(df=df_mod, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms)
+check_results(dfcount_mod)
+```
+
+For modified data
+```{r, fig.width = 10, fig.height=6}
+par(mfrow=c(1,2))
+plot_weighted_km(dfcount_mod)
+plot_km(df=df_mod, tte.name=tte.name, event.name=event.name, treat.name=treat.name)
+```
+
 
 # Appendix: Survival analysis helper and main analysis functions
 
@@ -516,6 +571,8 @@ flowchart
 
 ### plot_weighted_km
 
+This function calls `KM_plot_2sample_weighted_counting` described below.
+
 **Key Features:**
 - Plots weighted Kaplan-Meier survival curves for two groups.
 - Supports display of confidence intervals and risk tables.
@@ -541,6 +598,60 @@ flowchart
 3. Plots survival curves, confidence intervals, and risk tables.
 4. Adds optional annotations or subgroup curves if specified.
 
+
+## Summary of KM_plot_2sample_weighted_counting Function
+
+The `KM_plot_2sample_weighted_counting` function plots Kaplan-Meier survival curves for two groups (e.g., treatment and control) using weighted counting data, with options for displaying risk tables, legends, median survival, and statistical results (Cox model, log-rank test).
+
+**Key Features:**
+- Input validation for required data fields
+- Extraction of survival, censoring, and risk set data for both groups
+- Optional checks for valid KM curves
+- Plotting of KM curves with customizable appearance
+- Optional risk table below the plot
+- Legends for arms, Cox model, and log-rank test
+- Optional annotation of median survival
+- Extensive customization options
+
+**Parameters:**
+
+### `xmed.fraction` Parameter
+
+**Purpose:** Controls the horizontal position of the median survival annotation (or other quantile annotation) on the Kaplan-Meier plot.
+
+**How it works:**
+- Numeric value between 0 and 1.
+- Specifies the fraction of the x-axis (time axis) at which to place the median annotation text.
+    - `xmed.fraction = 0` places the annotation at the far left of the plot.
+    - `xmed.fraction = 1` places it at the far right.
+    - Typical value like `xmed.fraction = 0.80` places the annotation at 80% of the way from left to right.
+
+**Example:**
+If your time axis goes from 0 to 24 months and `xmed.fraction = 0.80`, the annotation will be placed at 19.2 months on the x-axis.
+
+**Usage in the function:**
+Allows fine-tuning of the median (or quantile) label position to avoid overlap with curves or other plot elements.
+
+- `dfcount`: List with all necessary data
+- `show.cox`, `show.logrank`: Show Cox/log-rank results
+- `show_arm_legend`: Show arm legend
+- `arms`: Names of the two groups
+- `put.legend.arms`, `put.legend.cox`, `put.legend.lr`: Legend positions
+- `col.0`, `col.1`: Colors for the two groups
+- `ltys`, `lwds`: Line types and widths
+- `show.med`: Show median survival annotation
+- ...and many more for fine-tuning
+
+**Workflow:**
+1. Validate input
+2. Extract data for both groups
+3. Check KM curves (optional)
+4. Plot KM curves
+5. Add risk table (optional)
+6. Add legends (arms, Cox, log-rank)
+7. Annotate median survival (optional)
+
+In summary, this function is a comprehensive tool for visualizing and annotating weighted Kaplan-Meier survival curves for two groups, with flexible options for statistical annotation and plot customization.
 
 
 

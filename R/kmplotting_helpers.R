@@ -140,9 +140,11 @@ add_median_annotation <- function(medians_df, med.digits, med.cex, med.font, xme
     paste(medians_df$group, medians_df$label, sep = ": "),
     collapse = "\n"
   )
+
   usr <- par("usr")
   x_pos <- usr[2] * xmed.fraction
   y_pos <- usr[4] - ymed.offset
+
   text(x = x_pos, y = y_pos, labels = annotation_text, adj = c(0, 1), cex = med.cex, font = med.font)
 }
 
@@ -168,8 +170,8 @@ add_legends <- function(dfcount, show.cox, cox.cex, put.legend.cox, show.logrank
   if (show.cox && !is.null(dfcount$cox_results)) {
     legend(put.legend.cox, legend = dfcount$cox_results$cox_text, cex = cox.cex, bty = "n")
   }
-  if (show.logrank && !is.null(dfcount$logrank_results)) {
-    legend(put.legend.lr, legend = dfcount$logrank_results$logrank_text, cex = logrank.cex, bty = "n")
+  if (show.logrank && !is.null(dfcount$z.score)) {
+    legend(put.legend.lr, legend = dfcount$zlogrank_text, cex = logrank.cex, bty = "n")
   }
   if (show_arm_legend) {
     legend(put.legend.arms, legend = arms, col = c(col.1, col.0), lty = ltys, lwd = lwds, cex = arm.cex, bty = "n")
@@ -207,7 +209,6 @@ add_legends <- function(dfcount, show.cox, cox.cex, put.legend.cox, show.logrank
 #' @param arm.cex Text size for arm legend.
 #' @param quant, qlabel Quantile and label for annotation.
 #' @param risk.cex Text size for risk table.
-#' @param plotit Logical; whether to plot (default: TRUE).
 #' @param ltys, lwds Line types and widths for curves.
 #' @param censor.mark.all Logical; whether to mark all censored times.
 #' @param censor.cex Size of censor marks.
@@ -239,18 +240,20 @@ add_legends <- function(dfcount, show.cox, cox.cex, put.legend.cox, show.logrank
 #'
 #' @export
 KM_plot_2sample_weighted_counting <- function(
-    dfcount, show.cox = FALSE, cox.cex = 0.725, show.logrank = FALSE,
+    dfcount, show.cox = TRUE, cox.cex = 0.725, show.logrank = FALSE,
     logrank.cex = 0.725, cox.eps = 0.001, lr.eps = 0.001, show_arm_legend = TRUE,
     arms = c("treat", "control"), put.legend.arms = "left", stop.onerror = TRUE,
-    check.KM = TRUE, put.legend.cox = "topright", put.legend.lr = "top",
+    check.KM = TRUE, put.legend.cox = "topright", put.legend.lr = "topleft",
     lr.digits = 2, cox.digits = 2, tpoints.add = c(0), by.risk = NULL, Xlab = "time",
-    Ylab = "proportion surviving", col.0 = "black", col.1 = "blue", show.med = FALSE,
-    med.digits = 2, med.font = 3, conf.int = FALSE, conf_level = 0.95,
-    choose_ylim = FALSE, arm.cex = 0.7, quant = 0.5, qlabel = "median =", med.cex = 0.725,
-    ymed.offset = 0.10, xmed.fraction = 0.5, risk.cex = 0.725, plotit = TRUE,
+    Ylab = "proportion surviving", col.0 = "black", col.1 = "blue", show.med = TRUE,
+    med.digits = 2, med.font = 4, conf.int = FALSE, conf_level = 0.95,
+    choose_ylim = FALSE, arm.cex = 0.7,
+    quant = 0.5, qlabel = "median =", med.cex = 0.725,
+    ymed.offset = 0.10, xmed.fraction = 0.80,
+    risk.cex = 0.725,
     ltys = c(1, 1), lwds = c(1, 1), censor.mark.all = TRUE, censor.cex = 0.5,
     show.ticks = TRUE, risk.set = TRUE, ymin = 0, ymax = 1, ymin.del = 0.035,
-    ymin2 = NULL, risk_offset = 0.075, risk_delta = 0.025, y.risk0 = NULL,
+    ymin2 = NULL, risk_offset = 0.125, risk_delta = 0.05, y.risk0 = NULL,
     show.Y.axis = TRUE, cex_Yaxis = 1, y.risk1 = NULL, add.segment = FALSE,
     risk.add = NULL, xmin = 0, xmax = NULL, x.truncate = NULL, time.zero = 0.0,
     prob.points = NULL
@@ -301,6 +304,7 @@ KM_plot_2sample_weighted_counting <- function(
 
   abline(h = ymin - ymin.del, lty = 1, col = 1)
   add_legends(dfcount, show.cox, cox.cex, put.legend.cox, show.logrank, logrank.cex, put.legend.lr, show_arm_legend, arms, col.1, col.0, ltys, lwds, arm.cex, put.legend.arms)
+
   if (show.med && !is.null(dfcount$quantile_results)) {
     add_median_annotation(dfcount$quantile_results, med.digits, med.cex, med.font, xmed.fraction, ymed.offset)
   }

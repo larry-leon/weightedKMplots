@@ -13,7 +13,7 @@ safe_run <- function(expr) {
 #' Get df_counting
 #' @export
 get_dfcounting <- function(df, tte.name, event.name, treat.name, arms, by.risk=12, cox.digits=3, lr.digits=3,
-                           qprob=0.50, strata.name=NULL, weight.name=NULL, check.KM = TRUE, rho = 0, gamma = 0, draws = 0, seedstart = 8316951, check.seKM = TRUE) {
+                           qprob=0.50, strata.name=NULL, weight.name=NULL, check.KM = TRUE, rho = 0, gamma = 0, draws = 0, seedstart = 8316951, check.seKM = FALSE) {
   safe_run({
     dfcount <- df_counting(
       df=df, tte.name=tte.name, event.name=event.name, treat.name=treat.name,
@@ -54,9 +54,7 @@ plot_km <- function(df, tte.name, event.name, treat.name, weights=NULL, ...) {
 #' @export
 plot_weighted_km <- function(dfcount, ...) {
   safe_run({
-    KM_plot_2sample_weighted_counting(
-      dfcount=dfcount, risk.cex=0.725, risk_offset=0.125, risk_delta=0.05,
-      show.cox=TRUE, show.logrank=FALSE, show.med=TRUE, med.font=4, ...
+    KM_plot_2sample_weighted_counting(dfcount=dfcount, ...
     )
   })
 }
@@ -210,7 +208,7 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
                         by.risk=6, time.zero.label = 0.0, risk.add=NULL, get.cox=TRUE, cox.digits=2, lr.digits=2,
                         cox.eps = 0.001, lr.eps = 0.001, verbose = FALSE,
                         qprob=0.5, rho = 0, gamma = 0, scheme = "fh",
-                        conf_level = 0.95, check.KM = TRUE, check.seKM = TRUE, draws = 0, seedstart = 8316951,
+                        conf_level = 0.95, check.KM = TRUE, check.seKM = FALSE, draws = 0, seedstart = 8316951,
                         stop.onerror=FALSE,censoring_allmarks=TRUE) {
 
   validate_input(df, c(tte.name, event.name, treat.name, weight.name))
@@ -235,10 +233,14 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
     hr <- exp(cox_fit$coef)
     hr_ci <- exp(confint(cox_fit))
     pval <- cox_summary$coefficients[1, "Pr(>|z|)"]
-    cox_text <- paste0("HR = ", round(hr, cox.digits),
-                       " (", round(hr_ci[1], cox.digits), ", ", round(hr_ci[2], cox.digits), ")",
-                       ", p = ", format_pval(pval, eps = cox.eps, digits = cox.digits))
-    cox_results <- list(
+    # cox_text <- paste0("HR = ", round(hr, cox.digits),
+    #                    " (", round(hr_ci[1], cox.digits), ", ", round(hr_ci[2], cox.digits), ")",
+    #                    ", p = ", format_pval(pval, eps = cox.eps, digits = cox.digits))
+
+     cox_text <- paste0("HR = ", round(hr, cox.digits),
+                        " (", round(hr_ci[1], cox.digits), ", ", round(hr_ci[2], cox.digits), ")")
+
+     cox_results <- list(
       cox_fit = cox_fit,
       hr = hr,
       hr_ci = hr_ci,
@@ -354,7 +356,11 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
   ans$quantile_results <- get_kmq
 
   get_score <- z_score_calculations(nbar0, ybar0, nbar1, ybar1, rho = rho, gamma = gamma, S_pool = survP, scheme = scheme)
-  ans$z.score <- get_score$z.score
+  z.score <- get_score$z.score
+  ans$z.score <- z.score
+  ans$get_score <- get_score
+  pval <- 1 - pnorm(z.score)
+  ans$zlogrank_text <- paste0("logrank (1-sided) p = ", format_pval(pval, eps = lr.eps, digits = lr.digits))
 
   # KM curve checks
   if (check.KM) {
