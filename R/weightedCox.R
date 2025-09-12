@@ -550,7 +550,7 @@ cox_rhogamma_resample <- function(fit_rhogamma,G1.draws = NULL, G0.draws = NULL,
       i.bhat = i_bhat,
       score.obs = score_obs
     ))
-  }
+   }
   if(draws == 0){
     return(list(
       se.beta.asy = sig_beta_asy,

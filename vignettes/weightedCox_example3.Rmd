@@ -4,17 +4,26 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, messages = FALSE)
 rm(list=ls())
 library(survival)
 library(weightedKMplots)
 library(tinytex)
 
 # source revised functions (to be updated in weightedKMplots)
-source("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/R/df_counting_improved.R")
-source("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/R/km_calculations_helpers.R")
-source("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/R/kmplotting_helpers.R")
-source("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/R/weightedCox.R")
+# source("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/R/df_counting_improved.R")
+# source("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/R/km_calculations_helpers.R")
+# source("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/R/kmplotting_helpers.R")
+# source("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/R/weightedCox.R")
+
+source("~/Documents/GitHub/weightedKMplots/R/df_counting_improved.R")
+source("~/Documents/GitHub/weightedKMplots/R/km_calculations_helpers.R")
+source("~/Documents/GitHub/weightedKMplots/R/kmplotting_helpers.R")
+source("~/Documents/GitHub/weightedKMplots/R/weightedCox.R")
+
+#remove.packages("future")
+#remotes::install_version("future", version = "1.33.0")
+
 
 ```
 
@@ -147,7 +156,7 @@ library(dplyr)
 library(tibble)
 library(gt)
 library(ggplot2)
-library(cowplot)
+#library(cowplot)
 library(simtrial)
 library(tidyr)
 library(future.batchtools)
@@ -388,7 +397,16 @@ maxcombopz <- (analysis_data |> maxcombo(rho = c(0,0), gamma = c(0,0.5), return_
 
 ```{r}
 
-plan(multisession(workers = 8))
+#options(future.makeNodePSOCK.setup_strategy = "sequential")
+
+plan(multisession(workers = 10))
+
+#plan(multicore)
+# also run as R script
+#Rscript script.R
+#library(future.callr)
+#plan(callr)
+
 set.seed(8316951)
 
 n_sim <- 1000
@@ -405,7 +423,6 @@ tictoc::tic()
 # Do simulations by scenario
 results <- foreach(scen = 1:6, .combine = 'rbind')%:%
   foreach(sim = 1:n_sim, .combine = 'rbind', .options.future = list(seed = TRUE)) %dofuture% {
-    library(dplyr)
     library(simtrial)
 tryCatch({sim_fn(scen = scen, enroll_rate = mwlr$enroll_rate, dropout_rate = dropout_rate, 
            fr = fr |> dplyr::filter(Scenario == scen))},
