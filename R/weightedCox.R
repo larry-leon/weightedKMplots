@@ -1,4 +1,5 @@
 
+# weighted Cox based on coxph (Therneau's example)
 get_cphw <- function(Y,Delta,X,wt,alpha=0.025){
   calpha <- qnorm(1-alpha)
   toget <- which(wt>0)
