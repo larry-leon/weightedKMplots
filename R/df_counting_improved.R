@@ -292,6 +292,24 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
     strata <- strata[ord]
     wgt <- wgt[ord]
   }
+
+  ans$time <- time
+  ans$delta <- delta
+  ans$z <- z
+  ans$strata <- strata
+  ans$w_hat <- wgt
+
+  at_points_all <- time
+  ans$at_points_all <- at_points_all
+  # Pooled KM estimates at all timepoints for input to cox estimation
+  risk_event <- calculate_risk_event_counts(time, delta, wgt, at_points_all)
+  ans$survP_all <- KM_estimates(ybar = risk_event$ybar, nbar = risk_event$nbar, sig2w_multiplier = risk_event$sig2w_multiplier)$S_KM
+  rm("risk_event")
+  # Also the censoring distribution
+  risk_event <- calculate_risk_event_counts(time, 1-delta, wgt, at_points_all)
+  ans$survG_all <- KM_estimates(ybar = risk_event$ybar, nbar = risk_event$nbar, sig2w_multiplier = risk_event$sig2w_multiplier)$S_KM
+  rm("risk_event")
+
   stratum <- unique(strata)
   risk.points <- sort(unique(c(seq(time.zero.label, max(time), by = ifelse(is.null(by.risk), 1, by.risk)), risk.add)))
   ans$risk.points <- risk.points
