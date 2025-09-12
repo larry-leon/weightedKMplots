@@ -359,7 +359,8 @@ maxcombopz <- (analysis_data |> maxcombo(rho = c(0,0), gamma = c(0,0.5), return_
   mb16z <- (analysis_data |> wlr(weight = mb(delay = 16, w_max = Inf)))$z
   
   # Mine
-  dfcount <- get_dfcounting(df=dfa, tte.name = "tte", event.name = "event", treat.name = "treat", arms = "treatment", by.risk= 6)
+  # Note: turnoff KM and seKM checking so that plots are not called within parallel sessions
+  dfcount <- get_dfcounting(df=dfa, tte.name = "tte", event.name = "event", treat.name = "treat", arms = "treatment", by.risk= 6, check.KM = FALSE, check.seKM = FALSE)
   # MB
   mb12z_mine <- cox_rhogamma(dfcount = dfcount, scheme = "MB", scheme_params = list(mb_tstar = 12))$z.score
  
@@ -390,7 +391,7 @@ maxcombopz <- (analysis_data |> maxcombo(rho = c(0,0), gamma = c(0,0.5), return_
 plan(multisession(workers = 8))
 set.seed(8316951)
 
-n_sim <- 25
+n_sim <- 1000
 
 fr$stratum <- "All"
 # Constant dropout rate for both treatment arms and all scenarios
@@ -403,13 +404,20 @@ dropout_rate <- data.frame(stratum = rep("All", 2),
 tictoc::tic()
 # Do simulations by scenario
 results <- foreach(scen = 1:6, .combine = 'rbind')%:%
-  foreach(sim = 1:n_sim, .combine = 'rbind', .options.future = list(seed = TRUE))%dofuture%{
-    sim_fn(scen = scen, enroll_rate = mwlr$enroll_rate, dropout_rate = dropout_rate, 
-           fr = fr |> dplyr::filter(Scenario == scen))
+  foreach(sim = 1:n_sim, .combine = 'rbind', .options.future = list(seed = TRUE)) %dofuture% {
+    library(dplyr)
+    library(simtrial)
+tryCatch({sim_fn(scen = scen, enroll_rate = mwlr$enroll_rate, dropout_rate = dropout_rate, 
+           fr = fr |> dplyr::filter(Scenario == scen))},
+         error = function(e) NA)
   }
+
+plan(sequential)
 tictoc ::toc()
 
 ```
+
+
 
 
 
