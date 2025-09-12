@@ -1,0 +1,444 @@
+---
+title: "Weighted Cox Example 1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+rm(list=ls())
+library(survival)
+library(weightedKMplots)
+library(tinytex)
+
+# source revised functions (to be updated in weightedKMplots)
+source("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/R/df_counting_improved.R")
+source("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/R/km_calculations_helpers.R")
+source("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/R/kmplotting_helpers.R")
+source("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/R/weightedCox.R")
+
+```
+
+
+Define at-risk processes:
+
+$$S^{(k)}(\beta, t) = \sum_{j} Y_j(t) X_j^k \exp(X_j^\top \beta) ) $$ 
+ Without ties the Cox score is 
+ 
+$$ U(\beta) = \sum_{i=1}^n \int_0^\tau \left[ X_i - \frac{S^{(1)}(\beta, t)}{S^{(0)}(\beta, t)} \right] dN_i(t) $$
+
+For Efron's approach define 
+
+$$S^{(k)}_{D}(\beta, t) = \sum_{j \in D(t)} X_j^k \exp(X_j^\top \beta) )$$
+
+
+
+ $$U(\beta) = \sum_{t} \sum_{l=1}^{d} \left[ X_{i_l} - \frac{S^{(1)}(\beta, t) - \frac{l-1}{d} S^{(1)}_D(\beta, t)}{S^{(0)}(\beta, t) - \frac{l-1}{d} S^{(0)}_D(\beta, t)} \right]$$ 
+ 
+
+
+
+
+
+# Setup gbsg and rotterdam datasets
+```{r, include=TRUE}
+df <- gbsg
+df$treat <- df$hormon
+# rfstime is time to recurrence in days
+# convert to months
+df$time_months <- df$rfstime/30.4375 
+df_gbsg <- df 
+
+# Following Therneau example
+gbsg_validate <-within(rotterdam,{
+  rfstime <- ifelse(recur==1,rtime,dtime)
+  #rfstime <- pmin(rtime,dtime)
+  t_months<-rfstime/30.4375
+  time_months <- t_months
+  status <- pmax(recur,death)
+  # censor if beyond 84 months ?
+  #time_months <- pmin(t_months,84)
+  #status <- ifelse(status==1 & t_months <= 84,1,0)
+  # Second version (conservative per Therneau)
+  ignore <- (recur==0 & death==1 & rtime < dtime)
+  status2 <- ifelse(recur==1 | ignore, recur, death)
+  rfstime2 <- ifelse(recur==1 | ignore, rtime,dtime)
+  time_months2 <- rfstime2/30.4375
+  grade3 <- ifelse(grade=="3",1,0)
+  treat <- hormon
+  id<-as.numeric(c(1:nrow(rotterdam)))  
+  SG0 <- ifelse(er<=0,0,1)
+})
+# Check subject 40 who was censored at recurrence but death afterwards
+# Event at 6.6 years
+#subset(gbsg_validate,pid==40)
+# node positive to match gbsg?
+df <- subset(gbsg_validate, nodes > 0)
+fit.ps <- glm(treat ~ age+meno+size+grade3+nodes+pgr+chemo+er, data = df, family="binomial")
+pihat <- fit.ps$fitted
+pihat.null <- glm(treat ~ 1, family = "binomial", data = df)$fitted
+wt.1 <- pihat.null/pihat
+wt.0 <- (1-pihat.null)/(1-pihat)
+# Stabilized weight
+df$sw.weights <- ifelse(df$treat == 1, wt.1,wt.0)
+
+df_rotterdam <- df
+
+tte.name<-c("time_months")
+event.name<-c("status")
+treat.name<-c("treat")
+arms <- c("treat","control")
+
+# Weighting for rotterdam data 
+wt.name <- c("sw.weights")
+
+```
+
+
+
+
+```{r}
+dfcount <- get_dfcounting(df=df, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, by.risk=24)
+```
+
+```{r, fig.width = 8, fig.height=6}
+plot_weighted_km(dfcount=dfcount, conf.int=TRUE, show.logrank = TRUE, ymax = 1.05)
+title(main="GBSG")
+```
+
+# FH(0,0)
+```{r}
+get_rg <- cox_rhogamma(dfcount = dfcount, scheme = "fh", scheme_params = list(rho = 0, gamma = 0), draws = 1000, verbose = TRUE)
+# Therneau's example    
+# result_fh <- cph.weighted(
+#   df = df,
+#   scheme = "fh",
+#   scheme_params = list(rho = 0, gamma = 0),
+#   outcome.name = "time_months",
+#   event.name = "status",
+#   treat.name = "hormon"
+# )
+# print(result_fh)
+```
+
+# Schemper 
+
+```{r}
+get_rg <- cox_rhogamma(dfcount = dfcount, scheme = "schemper", scheme_params = list(Scensor = dfcount$survG_all), draws = 1000, verbose = TRUE)
+```
+
+# MB
+```{r}
+get_rg <- cox_rhogamma(dfcount = dfcount, scheme = "MB", scheme_params = list(mb_tstar = 12), draws = 1000, verbose = TRUE)
+```
+
+# fh_exp2 
+```{r}
+get_rg <- cox_rhogamma(dfcount = dfcount, scheme = "fh_exp2", draws = 1000, verbose = TRUE)
+```
+
+
+# Simulation setup (from Keaven's examples)
+
+```{r}
+
+library(gsDesign)
+library(gsDesign2)
+library(dplyr)
+library(tibble)
+library(gt)
+library(ggplot2)
+library(cowplot)
+library(simtrial)
+library(tidyr)
+library(future.batchtools)
+library(doFuture)
+library(foreach)
+library(tictoc)
+```
+
+
+```{r}
+
+set.seed(8316951)
+
+survival_at_24_months <- 0.35
+hr <- log(.35)/log(.25)
+control_median <- 12
+control_rate <- c(log(2) / control_median, (log(.25) - log(.2)) / 12)
+
+scenarios <- tribble(
+  ~Scenario, ~Name,           ~Period, ~duration, ~Survival,
+  0,         "Control",       0,       0,         1,
+  0,         "Control",       1,       24,        .25,
+  0,         "Control",       2,       12,        .2,
+  1,         "PH",            0,       0,         1,
+  1,         "PH",            1,       24,        .35,
+  1,         "PH",            2,       12,        .2^hr,
+  2,         "3-month delay", 0,       0,         1,
+  2,         "3-month delay", 1,       3,         exp(-3 * control_rate[1]),
+  2,         "3-month delay", 2,       21,        .35,
+  2,         "3-month delay", 3,       12,        .2^hr,
+  3,         "6-month delay", 0,       0,         1,
+  3,         "6-month delay", 1,       6,         exp(-6 * control_rate[1]),
+  3,         "6-month delay", 2,       18,        .35,
+  3,         "6-month delay", 3,       12,        .2^hr,
+  4,         "Crossing",      0,       0,         1,
+  4,         "Crossing",      1,       3,         exp(-3 * control_rate[1] * 1.3),
+  4,         "Crossing",      2,       21,        .35,
+  4,         "Crossing",      3,       12,        .2^hr,
+  5,         "Weak null",     0,       0,         1,
+  5,         "Weak null",     1,       24,        .25,
+  5,         "Weak null",     2,       12,        .2,
+  6,         "Strong null",   0,       0,         1,         
+  6,         "Strong null",   1,       3,         exp(-3 * control_rate[1] * 1.5),
+  6,         "Strong null",   2,       3,         exp(-6 * control_rate[1]),
+  6,         "Strong null",   3,       18,        .25,
+  6,         "Strong null",   4,       12,        .2,
+  )
+# scenarios |> gt()
+
+fr <- 
+  scenarios |>
+    group_by(Scenario) |>
+  #  filter(Scenario == 2) |>
+    mutate(Month = cumsum(duration),
+           x_rate = -(log(Survival) - log(lag(Survival, default = 1))) / 
+           duration, 
+           rate = ifelse(Month > 24, control_rate[2], control_rate[1]),
+           hr = x_rate / rate) |>
+    select(-x_rate) |>
+    filter(Period > 0, Scenario > 0) |> ungroup()
+#fr |> gt() |> fmt_number(columns = everything(), decimals = 2)
+
+fr <- fr |> mutate(fail_rate = rate, dropout_rate =0.001, stratum = "All")
+
+# MWLR
+mwlr <- fixed_design_mb(
+  tau = 12,
+  enroll_rate = define_enroll_rate(duration = 12, rate = 1),
+  fail_rate = fr |> filter(Scenario == 2),
+  alpha = 0.025, power = .85, ratio = 1,
+  study_duration = 36
+) |> to_integer()
+
+
+er <- mwlr$enroll_rate
+
+
+fail_rate <- data.frame(stratum = rep("All", 2 * nrow(fr)),
+period = rep(fr$Period, 2),treatment = c(rep("control", nrow(fr)), 
+rep("experimental", nrow(fr))),duration = rep(fr$duration, 2),
+rate = c(fr$rate, fr$rate * fr$hr)
+)
+
+fr$stratum <- "All"
+# Constant dropout rate for both treatment arms and all scenarios
+dropout_rate <- data.frame(stratum = rep("All", 2), 
+                           period = rep(1, 2),
+                           treatment = c("control", "experimental"),
+                           duration = rep(100, 2),
+                           rate = rep(.001, 2)
+                          )
+```
+
+# Strong null
+```{r}
+# strong null
+dgm <- fr[c(14:17),]
+
+fail_rate <- data.frame(stratum = rep("All", 2 * nrow(dgm)),
+                          period = rep(dgm$Period, 2),
+                          treatment = c(rep("control", nrow(dgm)), 
+                                        rep("experimental", nrow(dgm))),
+                          duration = rep(dgm$duration, 2),
+                          rate = c(dgm$rate, dgm$rate * dgm$hr)
+                         )
+    
+# Constant dropout rate for both treatment arms and all scenarios
+dropout_rate <- data.frame(stratum = rep("All", 2), 
+                           period = rep(1, 2),
+                           treatment = c("control", "experimental"),
+                           duration = rep(100, 2),
+                           rate = rep(.001, 2)
+                          )
+
+er <- mwlr$enroll_rate
+
+```
+
+
+
+```{r}
+# Generate a dataset
+dat <- sim_pw_surv(n = 698, enroll_rate = er,
+fail_rate = fail_rate, dropout_rate = dropout_rate)
+analysis_data <- cut_data_by_date(dat, 36)
+dfa <- analysis_data
+dfa$treat <- ifelse(dfa$treatment=="experimental",1,0)
+```
+
+```{r}
+dfcount <- get_dfcounting(df=dfa, tte.name = "tte", event.name = "event", treat.name = "treat", arms = "treatment", by.risk= 6)
+```
+
+```{r, fig.width = 8, fig.height=6}
+plot_weighted_km(dfcount=dfcount, conf.int=TRUE, show.logrank = TRUE, ymax = 1.05)
+title(main="Simulated data")
+```
+
+
+# Correlation between log-rank and milestone (24-months) (tzero=24)
+```{r}
+
+temp <- wlr_dhat_estimates(dfcounting=dfcount, rho = 1, gamma = 0,tzero=24)
+cat("Correlation between WLR and KM difference at 24-months",c(temp$cor_wlr_dhat),"\n")
+my_wlr <- temp$lr/sqrt(temp$sig2_lr)
+# logrank rho=5,gamma=0
+# simtrial
+check <- dfa |> wlr(weight = fh(rho = 1, gamma = 0))
+cat("Mine and simtrial",c(my_wlr,check$z),"\n")
+
+coxz <- cox_rhogamma(dfcount = dfcount, scheme = "fh", scheme_params = list(rho = 1, gamma = 0), draws = 0, verbose = TRUE)$z.score
+coxz
+coxz^2
+
+temp <- survdiff(Surv(tte,event) ~ treat, data=dfa, rho = 1)
+temp$chisq
+temp$pvalue
+
+temp <- dfa |> wlr(weight = mb(delay = 6, w_max = Inf))
+mb6z <- temp$z
+mb6z 
+
+```
+
+# FH(0,1)
+```{r}
+get_rg <- cox_rhogamma(dfcount = dfcount, scheme = "fh", scheme_params = list(rho = 0, gamma = 1), draws = 1000, verbose = TRUE)
+```
+
+# MB
+```{r}
+get_rg <- cox_rhogamma(dfcount = dfcount, scheme = "MB", scheme_params = list(mb_tstar = 12), draws = 1000, verbose = TRUE)
+```
+
+# fh_exp2 
+```{r}
+get_rg <- cox_rhogamma(dfcount = dfcount, scheme = "fh_exp2", draws = 1000, verbose = TRUE)
+```
+
+```{r}
+sim_fn <- function(scen, enroll_rate, dropout_rate, fr, delay=12){
+
+fail_rate <- data.frame(stratum = rep("All", 2 * nrow(fr)),
+period = rep(fr$Period, 2),treatment = c(rep("control", nrow(fr)), 
+rep("experimental", nrow(fr))),duration = rep(fr$duration, 2),
+rate = c(fr$rate, fr$rate * fr$hr)
+)
+# Generate a dataset
+dat <- sim_pw_surv(n = 698, enroll_rate = enroll_rate,
+fail_rate = fail_rate, dropout_rate = dropout_rate)
+
+analysis_data <- cut_data_by_date(dat, 36)
+dfa <- analysis_data
+dfa$treat <- ifelse(dfa$treatment=="experimental",1,0)
+
+maxcombopz <- (analysis_data |> maxcombo(rho = c(0,0), gamma = c(0,0.5), return_corr = TRUE))
+ logrankz <- maxcombopz$z[1]
+ fh05z <- maxcombopz$z[2]
+
+ maxcombopz2 <- (analysis_data |> maxcombo(rho = c(0,0), gamma = c(0,1), return_corr = TRUE))
+ fh01z <- maxcombopz2$z[2]
+
+  maxcombop <- maxcombopz$p_value
+  
+  mb6z <- (analysis_data |> wlr(weight = mb(delay = 6, w_max = Inf)))$z
+  
+  mb12z <- (analysis_data |> wlr(weight = mb(delay = 12, w_max = Inf)))$z
+  
+  mb16z <- (analysis_data |> wlr(weight = mb(delay = 16, w_max = Inf)))$z
+  
+  # Mine
+  dfcount <- get_dfcounting(df=dfa, tte.name = "tte", event.name = "event", treat.name = "treat", arms = "treatment", by.risk= 6)
+  # MB
+  mb12z_mine <- cox_rhogamma(dfcount = dfcount, scheme = "MB", scheme_params = list(mb_tstar = 12))$z.score
+ 
+ fhexp2z <- cox_rhogamma(dfcount = dfcount, scheme = "fh_exp2")$z.score
+
+ fh01z_mine <- cox_rhogamma(dfcount = dfcount, scheme = "fh", scheme_params = list(rho = 0, gamma = 1))$z.score
+
+ 
+    return(data.frame(Scenario = scen, 
+                    MaxCombo = maxcombop,
+                    Logrank = logrankz,
+                    FH01 = fh01z,
+                    FH05 = fh05z,
+                    MB6 = mb6z,
+                    MB12 = mb12z,
+                    MB16 = mb16z,
+                    MB12mine = mb12z_mine,
+                    FHexp2 = fhexp2z,
+                    FH01mine = fh01z_mine
+                    ))
+}
+
+```
+
+
+```{r}
+
+plan(multisession(workers = 8))
+set.seed(8316951)
+
+n_sim <- 25000
+
+fr$stratum <- "All"
+# Constant dropout rate for both treatment arms and all scenarios
+dropout_rate <- data.frame(stratum = rep("All", 2), 
+                           period = rep(1, 2),
+                           treatment = c("control", "experimental"),
+                           duration = rep(100, 2),
+                           rate = rep(.001, 2)
+                          )
+tictoc::tic()
+# Do simulations by scenario
+results <- foreach(scen = 1:6, .combine = 'rbind')%:%
+  foreach(sim = 1:n_sim, .combine = 'rbind', .options.future = list(seed = TRUE))%dofuture%{
+    sim_fn(scen = scen, enroll_rate = mwlr$enroll_rate, dropout_rate = dropout_rate, 
+           fr = fr |> dplyr::filter(Scenario == scen))
+  }
+tictoc ::toc()
+
+```
+
+
+
+```{r}
+
+results$Scenario <- factor(results$Scenario, levels = 1:6,
+     labels = c("PH", "3m delay", "6m delay", "Crossing", "Weak null", "Strong null"))
+results |> group_by(Scenario) |> 
+  summarise(logrank = mean(Logrank <= qnorm(0.025)),
+            FH05 = mean(FH05 <= qnorm(0.025)),
+            FH01 = mean(FH01 <= qnorm(0.025)),
+            "MB(6)" = mean(1-pnorm(MB6) <= 0.025),
+            "MB(12)" = mean(1-pnorm(MB12) <= 0.025),
+            "MB(16)" = mean(1-pnorm(MB16) <= 0.025),
+            "maxcombbo" = mean(MaxCombo <= 0.025),
+            "MB12mine" = mean(1-pnorm(MB12mine) <= 0.025),
+            "FHexp2" = mean(1-pnorm(FHexp2) <= 0.025),
+            "FH01mine" = mean(1 - pnorm(FH01mine) <= 0.025)
+            ) |>
+  gt() |> fmt_number(columns = 2:10, decimals = 3)  
+
+```
+
+       
+
+
+## Simulations
+
+Simulations below are based on `r prettyNum(n_sim, big.mark=",")` trials simulated for each result. Type-1 error upper bounds are `r round(0.025 + 1.96*sqrt(0.025*0.975/n_sim),4)` and 
+`r round(0.05 + 1.96*sqrt(0.05*0.95/n_sim),4)` for $2.5\%$ (1-sided) and $5\%$ (2-sided) alpha-levels.  
+
+
