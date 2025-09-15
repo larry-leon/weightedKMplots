@@ -32,7 +32,7 @@ is_covered <- function(target,hr_ci){
 ifelse(hr_ci$lower <= target & hr_ci$upper >= target, 1, 0)
 }
 
-sim_fn_analysis <- function(scen, enroll_rate, dropout_rate, fr, delay = 12, sim_num, mart_draws = 300, hr_true){
+sim_fn_analysis <- function(scen, enroll_rate, dropout_rate, fr, delay = 12, sim_num, mart_draws = 300, hr_true, seedstart = 8316951){
 if(is.na(hr_true) | length(hr_true) !=1) stop("Target hazard-ratio hr_true is missing or of length > 1")
 res <- data.table()
 res$Scenario <- c(scen)
@@ -44,8 +44,7 @@ fail_rate <- data.frame(stratum = rep("All", 2 * nrow(fr)),
                           rate = c(fr$rate, fr$rate * fr$hr)
   )
   # Generate a dataset
-
-  set.seed(8316951 + 1000*sim_num)
+  set.seed(seedstart + 1000*sim_num)
 
   dat <- sim_pw_surv(n = 698, enroll_rate = enroll_rate,
                      fail_rate = fail_rate, dropout_rate = dropout_rate)
