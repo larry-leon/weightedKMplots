@@ -32,6 +32,7 @@ is_covered <- function(target,hr_ci){
 ifelse(hr_ci$lower <= target & hr_ci$upper >= target, 1, 0)
 }
 
+
 sim_fn_analysis <- function(scen, enroll_rate, dropout_rate, fr, delay = 12, sim_num, mart_draws = 300, hr_true, seedstart = 8316951){
 if(is.na(hr_true) | length(hr_true) !=1) stop("Target hazard-ratio hr_true is missing or of length > 1")
 res <- data.table()
@@ -164,7 +165,7 @@ fail_rate <- data.frame(stratum = rep("All", 2 * nrow(fr)),
   return(as.data.frame(res))
 }
 
-get_sims <- function(n_sim, dof_approach = "callr", num_workers = 4,  file_togo = c("results/sims_example_new.RData"), save_results = FALSE, verbose = TRUE, mart_draws = 100){
+get_sims <- function(n_sim, dof_approach = "callr", num_workers = 4,  seedstart = 8316951, file_togo = c("results/sims_example_new.RData"), save_results = FALSE, verbose = TRUE, mart_draws = 100){
 
   required_pkgs <- c("dplyr", "tibble", "foreach", "future", "tictoc", "simtrial", "doFuture")
   if(dof_approach == "callr") required_pkgs <- c(required_pkgs, "future.callr")
@@ -213,7 +214,7 @@ get_sims <- function(n_sim, dof_approach = "callr", num_workers = 4,  file_togo 
   index_ofinterest <- with(temp, which(fh01z_mine > qnorm(0.975) & fhe2z <= qnorm(0.975)))
 
   res_out <- list(get_setup = get_setup, results_sims = results_sims, tminutes = c(elapsed_seconds / 60), thours = c(elapsed_seconds / (60^2)),
-                  number_sims = n_sim, index_strongnull = index_ofinterest, hr_target = hr_PH)
+                  number_sims = n_sim, index_strongnull = index_ofinterest, hr_target = hr_PH, seedstart = seedstart)
 
   if(save_results) save(res_out, file = file_togo)
 

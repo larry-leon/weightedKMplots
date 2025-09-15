@@ -105,5 +105,8 @@ ans$dropout_rate <- dropout_rate
 return(ans)
 }
 
-these_sims <- get_sims(n_sim = 10000, num_workers = 100, mart_draws = 250, save_results = TRUE, file_togo = "vignettes/results/wCoxsims1_Linux_10k.RData")
+# Last n_sim was 10000:  For seedstart to append to last n_sims
+n_last <- 10*1000
+seedstart <- 8316951 + 1000*n_last
+these_sims <- get_sims(n_sim = 20*1000, seedstart = seedstart, num_workers = 100, mart_draws = 250, save_results = TRUE, file_togo = "vignettes/results/wCoxsims1_Linux_20k.RData")
 
