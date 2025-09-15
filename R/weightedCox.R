@@ -105,10 +105,32 @@ cph.weighted <- function(
   return(result)
 }
 
+# score calculation
+score_calculation <- function(ybar1, ybar0, dN1, dN0, wt_rg){
+dN <- dN1 + dN0
+num <- wt_rg * ybar1 * ybar0
+den <- ybar0 + ybar1
+K <- ifelse(den > 0, num / den, 0.0)
+
+drisk1 <- ifelse(ybar1 > 0, dN1 / ybar1, 0.0)
+drisk0 <- ifelse(ybar0 > 0, dN0 / ybar0, 0.0)
+score <- sum(K * (drisk0 - drisk1))
+
+h1 <- ifelse(ybar1 > 0, (K^2 / ybar1), 0.0)
+h2 <- ifelse(ybar0 > 0, (K^2 / ybar0), 0.0)
+temp <- c(den - 1)
+ybar_mod <- ifelse(temp < 1, 1, temp)
+dH1 <- ifelse(ybar_mod > 0, (dN-1) / ybar_mod, 0.0)
+dH2 <- ifelse(den > 0, dN / den, 0.0)
+sig2s <- (h1+h2)*(1-dH1)*dH2
+sig2U <- sum(sig2s)
+i_bhat <- sum(ifelse(den > 0, (num / (den^2)) * (dN0 + dN1), 0.0))
+sig2_beta_asy <- sig2U/i_bhat^2
+return(list(score = score, sig2U = sig2U, sig2_beta_asy = sig2_beta_asy, i_bhat = i_bhat, K_wt_rg = K))
+}
 
 
-
-cox_score_rhogamma <- function(beta, time, delta, z, w_hat = rep(1,length(time)), wt_rg = rep(1,length(time))) {
+cox_score_rhogamma <- function(beta, time, delta, z, w_hat = rep(1,length(time)), wt_rg = rep(1,length(time)), score_only = TRUE) {
   at_points <- time
   tt0 <- time[z == 0]
   dd0 <- delta[z == 0]
@@ -124,85 +146,22 @@ cox_score_rhogamma <- function(beta, time, delta, z, w_hat = rep(1,length(time))
   event_mat1 <- outer(tt1[dd1 == 1], at_points, FUN = "<=") * w1_hat[dd1 == 1]
   counting1 <- colSums(event_mat1)
   dN_z1 <- diff(c(0, counting1))
-  num <- wt_rg * risk_z1 * risk_z0
-  den <- risk_z0 + risk_z1
-  K <- ifelse(den > 0, num / den, 0.0)
-  drisk1 <- ifelse(risk_z1 > 0, dN_z1 / risk_z1, 0.0)
-  drisk0 <- ifelse(risk_z0 > 0, dN_z0 / risk_z0, 0.0)
-  score <- sum(K * (drisk0 - drisk1))
-  return(score)
+
+  score_stats <- score_calculation(ybar1 = risk_z1, ybar0 = risk_z0, dN0 = dN_z0, dN1 = dN_z1, wt_rg = wt_rg)
+
+  score <- score_stats$score
+
+  if(score_only){
+    return(score)
+  }
+  else{
+  sig2U <- score_stats$sig2U
+  sig2_beta_asy <- score_stats$sig2_beta_asy
+  K_wt_rg <- score_stats$K_wt_rg
+  i_bhat <- score_stats$i_bhat
+  return(list(score = score, sig2_score = sig2U, sig2_beta_asy = sig2_beta_asy, K_wt_rg = K_wt_rg, i_bhat = i_bhat))
+  }
 }
-
-
-cox_rhogamma_old <- function(dfcount, scheme = "fh", scheme_params = list(rho = 0, gamma = 0.5)) {
-  time <- dfcount$time
-  delta <- dfcount$delta
-  z <- dfcount$z
-  w_hat <- dfcount$w_hat
-  atpoints <- time
-
-  S.pool <- dfcount$survP_all
-  G.pool <- dfcount$survG_all
-
-  stopifnot(is.numeric(time), is.numeric(delta), is.numeric(z), is.numeric(w_hat), is.numeric(S.pool), is.numeric(G.pool))
-
-  n <- length(time)
-  n0 <- sum(z == 0)
-  n1 <- sum(z == 1)
-  if (n0 + n1 != n) stop("z must be a (0/1) treatment group indicator")
-
-  supported_schemes <- c("fh", "schemper", "XO", "MB", "custom_time", "fh_exp1", "fh_exp2")
-  if (!(scheme %in% supported_schemes)) {
-    stop("scheme must be one of: ", paste(supported_schemes, collapse = ", "))
-  }
-  # Only include tpoints in main list for schemes that do NOT require it in scheme_params
-  if (scheme %in% c("MB", "custom_time")) {
-    scheme_params$tpoints <- atpoints
-    wt_args <- c(list(S = S.pool, scheme = scheme), scheme_params)
-  } else {
-    wt_args <- c(list(S = S.pool, scheme = scheme, tpoints = atpoints), scheme_params)
-  }
-  # Parameter validation for each scheme
-  if (scheme == "fh" && (is.null(scheme_params$rho) || is.null(scheme_params$gamma))) {
-    stop("For Fleming-Harrington weights, specify both rho and gamma in scheme_params.")
-  }
-  if (scheme == "schemper" && (is.null(scheme_params$Scensor) || length(scheme_params$Scensor) != length(S.pool))) {
-    stop("For Schemper weights, provide Scensor (censoring KM) of same length as S in scheme_params.")
-  }
-  if (scheme == "XO" && (is.null(scheme_params$Ybar) || length(scheme_params$Ybar) != length(S.pool))) {
-    stop("For XO weights, provide Ybar (risk set sizes) of same length as S in scheme_params.")
-  }
-  if (scheme == "MB" && (is.null(scheme_params$tpoints) || length(scheme_params$tpoints) != length(S.pool) || is.null(scheme_params$mb_tstar))) {
-    stop("For MB weights, provide tpoints (time points) of same length as S and mb_tstar (cutoff time) in scheme_params.")
-  }
-  if (scheme == "custom_time" && (is.null(scheme_params$tpoints) || length(scheme_params$tpoints) != length(S.pool) || is.null(scheme_params$t.tau))) {
-    stop("For custom_time weights, provide tpoints (time points) of same length as S and t.tau (cutoff time) in scheme_params.")
-  }
-  # Calculate weights
-  wt_rg <- tryCatch(
-    do.call(wt.rg.S, wt_args),
-    error = function(e) {
-      stop(sprintf("Weight calculation failed for scheme %s: %s", scheme, e$message))
-    }
-  )
-  get_Cox <- tryCatch(
-    uniroot(f = cox_score_rhogamma, interval = c(-15, 15), extendInt = "yes", tol = 1e-10,
-            time = time, delta = delta, z = z, w_hat = w_hat, wt_rg = wt_rg),
-    error = function(e) NA
-  )
-  if (is.na(get_Cox$root)) {
-    warning("Root finding failed.")
-    return(list(bhat = NA, u.beta = NA, u.zero = NA, status = "fail"))
-  }
-  bhat_rhogamma <- get_Cox$root
-  u.zero <- cox_score_rhogamma(beta = 0, time = time, delta = delta, w_hat = w_hat, z = z, wt_rg = wt_rg)
-  u.beta <- cox_score_rhogamma(beta = bhat_rhogamma, time = time, delta = delta, w_hat = w_hat, z = z, wt_rg = wt_rg)
-  return(list(bhat = bhat_rhogamma, u.beta = u.beta, u.zero = u.zero, status = "ok", wt_rg = wt_rg, time = time, delta = delta, z = z, w_hat = w_hat))
-}
-
-
-
-
 
 
 
@@ -248,15 +207,6 @@ validate_scheme_params <- function(scheme, scheme_params, S.pool, tpoints) {
 }
 
 
-# Only include tpoints in main list for schemes that do NOT require it in scheme_params
-# if (scheme %in% c("MB", "custom_time")) {
-#   scheme_params$tpoints <- tpoints
-#   wt_args <- c(list(S = S.pool, scheme = scheme), scheme_params)
-# } else {
-#   wt_args <- c(list(S = S.pool, scheme = scheme, tpoints = tpoints), scheme_params)
-# }
-
-
 
 #' Calculate weights for weighted Cox model
 get_weights <- function(scheme, scheme_params, S.pool, tpoints) {
@@ -278,10 +228,10 @@ find_cox_root <- function(time, delta, z, w_hat, wt_rg) {
   )
 }
 
-ci_cox  <- function(bhat, se_bhat, alpha = 0.05, verbose = FALSE) {
+ci_cox  <- function(bhat, sig_bhat, alpha = 0.05, verbose = FALSE) {
   z <- qnorm(1 - alpha / 2)
-  bhat_lower <- bhat - z * se_bhat
-  bhat_upper <- bhat + z * se_bhat
+  bhat_lower <- bhat - z * sig_bhat
+  bhat_upper <- bhat + z * sig_bhat
   hr <- exp(bhat)
   lower <- exp(bhat_lower)
   upper <- exp(bhat_upper)
@@ -291,7 +241,7 @@ ci_cox  <- function(bhat, se_bhat, alpha = 0.05, verbose = FALSE) {
   }
   result <- data.frame(
     beta = bhat,
-    se_beta = se_bhat,
+    sig_bhat = sig_bhat,
     hr = hr,
     lower = lower,
     upper = upper
@@ -328,14 +278,10 @@ cox_rhogamma <- function(dfcount, scheme = "fh", scheme_params = list(rho = 0, g
     stop("scheme must be one of: ", paste(supported_schemes, collapse = ", "))
   }
 
-  # if (scheme %in% c("MB", "custom_time")) {
-  #   scheme_params$tpoints <- time
-  #   wt_args <- c(list(S = S.pool, scheme = scheme), scheme_params)
-  # } else {
-  #   wt_args <- c(list(S = S.pool, scheme = scheme, tpoints = tpoints), scheme_params)
-  # }
-
    if(scheme == "MB"){
+  if(is.null(scheme_params$mb_tstar)){
+   cat("Missing mb_tstar argument in scheme_params you have:", paste(names(scheme_params), collapse = ", "), "\n")
+     }
    scheme_params <- list(mb_tstar = scheme_params$mb_tstar, tpoints = time)
    }
 
@@ -343,8 +289,6 @@ cox_rhogamma <- function(dfcount, scheme = "fh", scheme_params = list(rho = 0, g
 
   # Calculate weights
   wt_rg <- get_weights(scheme, scheme_params, S.pool, tpoints = time)
-
-  #wt_rg <-  do.call(wt.rg.S, wt_args)
 
   # Find root of score function
   get_Cox <- find_cox_root(time, delta, z, w_hat, wt_rg)
@@ -355,13 +299,40 @@ cox_rhogamma <- function(dfcount, scheme = "fh", scheme_params = list(rho = 0, g
   }
 
   bhat_rhogamma <- get_Cox$root
-  u.zero <- cox_score_rhogamma(beta = 0, time = time, delta = delta, w_hat = w_hat, z = z, wt_rg = wt_rg)
-  u.beta <- cox_score_rhogamma(beta = bhat_rhogamma, time = time, delta = delta, w_hat = w_hat, z = z, wt_rg = wt_rg)
+
+  # Score test: U(beta=0)
+  temp <- cox_score_rhogamma(beta = 0, time = time, delta = delta, w_hat = w_hat, z = z, wt_rg = wt_rg, score_only = FALSE)
+  u.zero <- temp$score
+  z.score <- u.zero / sqrt(temp$sig2_score)
+  i_zero <- temp$i_bhat
+  K_zero <- temp$K_wt_rg
+  sig2_score <- temp$sig2_score
+  rm("temp")
+
+  ans$z.score <- z.score
+
+  temp <- cox_score_rhogamma(beta = bhat_rhogamma, time = time, delta = delta, w_hat = w_hat, z = z, wt_rg = wt_rg, score_only = FALSE)
+  u.beta <- temp$score
+  sig_bhat_asy <- sqrt(temp$sig2_beta_asy)
+  i_bhat <- temp$i_bhat
+  K_wt_rg <- temp$K_wt_rg
+  rm("temp")
+
+  pval <- 1 - pnorm(z.score)
+  ans$zlogrank_text <- paste0("logrank (1-sided) p = ", format_pval(pval, eps = 0.001, digits = lr.digits))
+  if(verbose) cat("z-statistic: ", ans$zlogrank_text, "\n")
+
+  # CI based on asymptotic SE
+  hr_ci_asy <- ci_cox(bhat = bhat_rhogamma, sig_bhat = sig_bhat_asy, alpha = alpha, verbose = verbose)
+  ans$hr_ci_asy <- hr_ci_asy
 
   fit_rhogamma <- list(
     bhat = bhat_rhogamma,
+    sig_bhat_asy = sig_bhat_asy,
     u.beta = u.beta,
     u.zero = u.zero,
+    z.score = z.score,
+    sig2_score = sig2_score,
     status = "ok",
     wt_rg = wt_rg,
     time = time,
@@ -372,28 +343,29 @@ cox_rhogamma <- function(dfcount, scheme = "fh", scheme_params = list(rho = 0, g
 
   ans$fit <- fit_rhogamma
 
-  get_resamples <- cox_rhogamma_resample(fit_rhogamma = fit_rhogamma, draws = draws, parallel = parallel_resampling)
-
-  # Score test
-  z.score <- u.zero / sqrt(get_resamples$sig2U.bzero)
-  ans$z.score <- z.score
-
-  pval <- 1 - pnorm(z.score)
-  ans$zlogrank_text <- paste0("logrank (1-sided) p = ", format_pval(pval, eps = 0.001, digits = lr.digits))
-  if(verbose) cat("z-statistic: ", ans$zlogrank_text, "\n")
-  ans$fit_resamples <- get_resamples
-  se_bhat_asy <- get_resamples$se.beta.asy
-  # CI based on asymptotic SE
-  hr_ci_asy <- ci_cox(bhat = fit_rhogamma$bhat, se_bhat = se_bhat_asy, alpha = alpha, verbose = verbose)
-  ans$hr_ci_asy <- hr_ci_asy
- if(verbose)
   if(draws > 0){
-  se_bhat_star <- get_resamples$se.beta
+
+  get_resamples <- cox_rhogamma_resample(fit_rhogamma = fit_rhogamma, i_bhat = i_bhat, K_wt_rg = K_wt_rg,
+                                         i_zero = i_zero, K_zero = K_zero, draws = draws, parallel = parallel_resampling
+                                         )
+  ans$fit_resamples <- get_resamples
+  sig_bhat_star <- get_resamples$sig_bhat_star
+  ans$fit$sig_bhat_star <- sig_bhat_star
   # De-biased hr
-  bhat_debiased <- fit_rhogamma$bhat - mean(get_resamples$bhat.center.star, na.rm =TRUE)
+  bhat_debiased <- fit_rhogamma$bhat - mean(get_resamples$bhat_center_star, na.rm = TRUE)
   ans$fit$bhat_debiased <- bhat_debiased
-  # CI based on asymptotic SE
-  ans$hr_ci_star <- ci_cox(bhat = bhat_debiased, se_bhat = se_bhat_star, alpha = alpha, verbose = verbose)
+  ans$fit$wald_debiased1 <- bhat_debiased / sig_bhat_asy
+  ans$fit$wald_debiased2 <- bhat_debiased / sig_bhat_star
+  ans$fit$wald <- fit_rhogamma$bhat / sig_bhat_asy
+  # CI based on de-biased and resampled SEs
+  ans$hr_ci_star <- ci_cox(bhat = bhat_debiased, sig_bhat = sig_bhat_star, alpha = alpha, verbose = verbose)
+  # De-biased score
+  sig2_score_star <- var(get_resamples$score_star, na.rm = TRUE)
+  ans$sig2_score_star <- sig2_score_star
+  u.zero_debiased <- u.zero - mean(get_resamples$score_star_null, na.rm = TRUE)
+  ans$z.score_debiased <- u.zero_debiased / sqrt(sig2_score)
+  #ans$z.score_debiased <- u.zero / sqrt(sig2_score_star)
+
   }
 ans
 }
@@ -417,13 +389,13 @@ ans
 #' @param workers Number of parallel workers
 #' @return List with resampling results
 #' @export
-cox_rhogamma_resample <- function(fit_rhogamma,G1.draws = NULL, G0.draws = NULL,
+cox_rhogamma_resample <- function(fit_rhogamma, i_bhat, K_wt_rg, i_zero, K_zero, G1.draws = NULL, G0.draws = NULL,
                                   draws = 100, seedstart=8316951,
                                   parallel = FALSE, workers = NULL
 ) {
 
   bhat <- fit_rhogamma$bhat
-
+  sig_bhat_asy <- fit_rhogamma$sig_bhat_asy
   time <- fit_rhogamma$time
   delta <- fit_rhogamma$delta
   z <- fit_rhogamma$z
@@ -446,9 +418,7 @@ cox_rhogamma_resample <- function(fit_rhogamma,G1.draws = NULL, G0.draws = NULL,
   idx0 <- which(z == 0)
   idx1 <- which(z == 1)
   y0 <- time[idx0]; d0 <- delta[idx0]
-  #w0 <- wt_rg[idx0]
   y1 <- time[idx1]; d1 <- delta[idx1]
-  #w1 <- wt_rg[idx1]
   w0_hat <- w_hat[idx0]; w1_hat <- w_hat[idx1]
 
   event_mat0 <- outer(y0, at_points, FUN = "<=")
@@ -457,55 +427,48 @@ cox_rhogamma_resample <- function(fit_rhogamma,G1.draws = NULL, G0.draws = NULL,
   risk_mat1  <- outer(y1, at_points, FUN = ">=")
   risk_z0 <- colSums(risk_mat0 *  w0_hat)
   risk_z1 <- colSums(risk_mat1 *  w1_hat * exp(bhat))
+
+
   counting0 <- colSums(event_mat0 * (d0 *  w0_hat))
   counting1 <- colSums(event_mat1 * (d1 *  w1_hat))
   dN_z0 <- diff(c(0, counting0))
   dN_z1 <- diff(c(0, counting1))
-  num <- wt_rg * risk_z1 * risk_z0
-  den <- risk_z0 + risk_z1
-  K <- ifelse(den > 0, num / den, 0.0)
-  drisk1 <- ifelse(risk_z1 > 0, dN_z1 / risk_z1, 0.0)
-  drisk0 <- ifelse(risk_z0 > 0, dN_z0 / risk_z0, 0.0)
-  score_obs <- sum(K * (drisk0 - drisk1))
-  i_bhat <- sum(ifelse(den > 0, (num / (den^2)) * (dN_z0 + dN_z1), 0.0))
-  DNbar <- dN_z0 + dN_z1
-  h1 <- ifelse(risk_z1 > 0, (K^2 / risk_z1), 0.0)
-  h2 <- ifelse(risk_z0 > 0, (K^2 / risk_z0), 0.0)
-  temp <- c(den - 1)
-  ybar_mod <- ifelse(temp < 1, 1, temp)
-  dH1 <- ifelse(ybar_mod > 0, (DNbar-1) / ybar_mod, 0.0)
-  dH2 <- ifelse(den > 0, DNbar / den, 0.0)
-  sig2s <- (h1+h2)*(1-dH1)*dH2
-  sig2U_bzero <- sum(sig2s)
-  sig_beta_asy <- sqrt(sig2U_bzero/i_bhat^2)
+
   if(draws > 0){
     if(!parallel){
       counting0_star_all <- t(event_mat0 *  w0_hat) %*% (d0 * G0.draws)
       counting1_star_all <- t(event_mat1 *  w1_hat) %*% (d1 * G1.draws)
       dN_z0_star_all <- apply(counting0_star_all, 2, function(x) diff(c(0, x)))
       dN_z1_star_all <- apply(counting1_star_all, 2, function(x) diff(c(0, x)))
+
       drisk1_star <- sweep(dN_z1_star_all, 1, risk_z1, "/")
       drisk1_star[is.infinite(drisk1_star) | is.nan(drisk1_star)] <- 0
       drisk0_star <- sweep(dN_z0_star_all, 1, risk_z0, "/")
       drisk0_star[is.infinite(drisk0_star) | is.nan(drisk0_star)] <- 0
-      score_star <- colSums(K * (drisk0_star - drisk1_star))
+
+      score_star <- colSums(K_wt_rg * (drisk0_star - drisk1_star))
+
       bhat_center_star <- score_star / i_bhat
-      Z_bstar <- bhat_center_star / sig_beta_asy
-      var_bhat <- var(bhat_center_star, na.rm = TRUE)
-      se_beta <- sqrt(var_bhat)
+      Z_bstar <- bhat_center_star / sig_bhat_asy
+      var_bhat_star <- var(bhat_center_star, na.rm = TRUE)
+      sig_bhat_star <- sqrt(var_bhat_star)
+
+       # Logrank stat (replace risk_z1(bhat) with risk_z1_null = risk_z1(bhat=0))
+       risk_z1_null <- colSums(risk_mat1 *  w1_hat)
+       drisk1_star_null <- sweep(dN_z1_star_all, 1, risk_z1_null, "/")
+       drisk1_star_null[is.infinite(drisk1_star_null) | is.nan(drisk1_star_null)] <- 0
+       score_star_null <- colSums(K_zero * (drisk0_star - drisk1_star_null))
+
       return(list(
-        se.beta.asy = sig_beta_asy,
-        sig2U.bzero = sig2U_bzero,
-        score.star = score_star,
-        bhat.center.star = bhat_center_star,
-        Z.bstar = Z_bstar,
-        var.bhat = var_bhat,
-        se.beta = se_beta,
-        i.bhat = i_bhat,
-        score.obs = score_obs
+        score_star = score_star,
+        score_star_null = score_star_null,
+        bhat_center_star = bhat_center_star,
+        Z_bstar = Z_bstar,
+        sig_bhat_star = sig_bhat_star
       ))
     }
     if (parallel) {
+      stop("This needs to be re-written")
       if(draws >= 50000) stop("parallel does not currently support 50k draws")
       if (!requireNamespace("future.apply", quietly = TRUE)) stop("Please install the 'future.apply' package.")
       if (is.null(workers)) {
@@ -553,9 +516,8 @@ cox_rhogamma_resample <- function(fit_rhogamma,G1.draws = NULL, G0.draws = NULL,
    }
   if(draws == 0){
     return(list(
-      se.beta.asy = sig_beta_asy,
-      sig2U.bzero = sig2U_bzero,
-      score.obs = score_obs
+      sig_bhat_asy = sig_bhat_asy,
+      score_obs = score_obs
     ))
   }
 }

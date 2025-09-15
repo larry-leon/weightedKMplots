@@ -106,7 +106,7 @@ wt.name <- c("sw.weights")
 
 
 ```{r}
-dfcount <- get_dfcounting(df=df, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, by.risk=24)
+dfcount <- get_dfcounting(df=df_gbsg, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, by.risk=24)
 ```
 
 ```{r, fig.width = 8, fig.height=6}
@@ -116,7 +116,30 @@ title(main="GBSG")
 
 # FH(0,0)
 ```{r}
+
+
+#get_rg <- cox_rhogamma(dfcount = dfcount, scheme = "fh", scheme_params = list(rho = 0, gamma = 0), draws = 0, verbose = TRUE)
+
 get_rg <- cox_rhogamma(dfcount = dfcount, scheme = "fh", scheme_params = list(rho = 0, gamma = 0), draws = 1000, verbose = TRUE)
+
+temp <- wlr_dhat_estimates(dfcounting=dfcount, rho = 0, gamma = 0,tzero=24)
+cat("Correlation between WLR and KM difference at 24-months",c(temp$cor_wlr_dhat),"\n")
+temp$lr/sqrt(temp$sig2_lr)
+
+get_rg$z.score
+
+
+# logrank rho=5,gamma=0
+# simtrial
+# dfa <- df
+# dfa$tte <- dfa$time_months
+# dfa$event <- dfa$status
+# dfa$treatment <- ifelse(dfa$treat ==1, "experimental", "control")
+# dfa$stratum <- "All"
+# dfa2 <- as.data.table(dfa) 
+# check <- dfa2 |> wlr(weight = fh(rho = 1, gamma = 0))
+# cat("Mine and simtrial",c(my_wlr,check$z),"\n")
+
 # Therneau's example    
 # result_fh <- cph.weighted(
 #   df = df,
@@ -440,26 +463,92 @@ save(results_sims, file="results/sims_example1_mac_100k.Rdata")
 ```
 
 
-
+# Weighted log-rank statistics
 
 
 ```{r}
-results <- results_sims
+
+results <- res_out$results_sims
 results$Scenario <- factor(results$Scenario, levels = 1:6,
      labels = c("PH", "3m delay", "6m delay", "Crossing", "Weak null", "Strong null"))
 results |> group_by(Scenario) |> 
-  summarise(logrank = mean(Logrank <= qnorm(0.025)),
-            FH05 = mean(FH05 <= qnorm(0.025)),
-            FH01 = mean(FH01 <= qnorm(0.025)),
-            "MB(6)" = mean(1-pnorm(MB6) <= 0.025),
-            "MB(12)" = mean(1-pnorm(MB12) <= 0.025),
-            "MB(16)" = mean(1-pnorm(MB16) <= 0.025),
-            "maxcombbo" = mean(MaxCombo <= 0.025),
-            "MB12mine" = mean(1-pnorm(MB12mine) <= 0.025),
-            "FHexp2" = mean(1-pnorm(FHexp2) <= 0.025),
-            "FH01mine" = mean(1 - pnorm(FH01mine) <= 0.025)
+  summarise("logrank" = mean(logrankz > qnorm(0.975)),
+            "fh00*" = mean(fh00z_mine > qnorm(0.975)),  
+            "FH05" = mean(fh05z > qnorm(0.975)),
+            "FH05*" = mean(fh05z_mine > qnorm(0.975)),
+            "FH01" = mean(fh01z > qnorm(0.975)),
+            "FH01*" = mean(fh01z_mine > qnorm(0.975)),
+            "FH01db" = mean(fh01z_debiased > qnorm(0.975)),
+            "MB(6)" = mean(mb6z > qnorm(0.975)),
+            "MB(6)*" = mean(mb6z_mine > qnorm(0.975)),
+            "MB(12)" = mean(mb12z > qnorm(0.975)),
+            "MB(12)*" = mean(mb12z_mine > qnorm(0.975)),
+            "MB(16)" = mean(mb16z > qnorm(0.975)),
+            "MB(16)*" = mean(mb16z_mine > qnorm(0.975)),
+            "FHexp1" = mean(fhe1z > qnorm(0.975)),
+            "FHexp2" = mean(fhe2z > qnorm(0.975)),
+            "maxcombbo" = mean(maxcombop <= 0.025)
             ) |>
-  gt() |> fmt_number(columns = 2:10, decimals = 3)  
+  gt() |> fmt_number(columns = 2:16, decimals = 3)  
+
+```
+
+
+# WLR and Wald tests (upper-bound < 1)
+
+```{r}
+
+results <- res_out$results_sims
+results$Scenario <- factor(results$Scenario, levels = 1:6,
+     labels = c("PH", "3m delay", "6m delay", "Crossing", "Weak null", "Strong null"))
+results |> group_by(Scenario) |> 
+  summarise("Cox" = mean(fh00_wald < 1.0),
+            "Cox*" = mean(fh00_waldstar < 1.0),
+            "fh00z" = mean(fh00z_mine > qnorm(0.975)),  
+            "FH05w" = mean(fh05_wald < 1.0),
+            "FH05w*" = mean(fh05_waldstar < 1.0),
+            "FH05z" = mean(fh05z_mine > qnorm(0.975)),
+            "FH01w" = mean(fh01_wald < 1.0),
+            "FH01w*" = mean(fh01_waldstar < 1.0),
+            "FH01z" = mean(fh01z_mine > qnorm(0.975)),
+            "MB(12)w" = mean(mb12_wald < 1.0),
+            "MB(12)w*" = mean(mb12_waldstar < 1.0),
+            "MB(12)z" = mean(mb12z_mine > qnorm(0.975)),
+            "FHe1w" = mean(fhe1_wald < 1.0),
+            "FHe1w*" = mean(fhe1_waldstar < 1.0),
+            "FHe1z" = mean(fhe1z > qnorm(0.975)),
+            "FHe2w" = mean(fhe2_wald < 1.0),
+            "FHe2w*" = mean(fhe2_waldstar < 1.0),
+            "FHe2z" = mean(fhe2z > qnorm(0.975))
+            ) |>
+  gt() |> fmt_number(columns = 2:18, decimals = 3)  
+
+```
+       
+       
+       
+       
+# Hazard-ratio estimates
+
+```{r}
+
+results <- res_out$results_sims
+results$Scenario <- factor(results$Scenario, levels = 1:6,
+     labels = c("PH", "3m delay", "6m delay", "Crossing", "Weak null", "Strong null"))
+results |> group_by(Scenario) |> 
+  
+    summarise("Cox" = mean(exp(fh00_bhat), na.rm=TRUE),
+              "Coxdb" = mean(exp(fh00_bhatdebiased), na.rm=TRUE),
+              "se00" = sqrt(var(fh00_bhat, na.rm=TRUE)),
+              "se00h" = mean(fh00_sigbhat, na.rm=TRUE),
+              "se00h*" = mean(fh00_sigbhatstar, na.rm = TRUE),
+              "FH01" = mean(exp(fh01_bhat), na.rm=TRUE),
+              "FH01db" = mean(exp(fh01_bhatdebiased), na.rm=TRUE),
+              "se01" = sqrt(var(fh01_bhat, na.rm=TRUE)),
+              "se01h" = mean(fh01_sigbhat, na.rm=TRUE),
+              "se01h*" = mean(fh01_sigbhatstar, na.rm = TRUE)
+            ) |>
+  gt() |> fmt_number(columns = 2:11, decimals = 3)  
 
 ```
 
