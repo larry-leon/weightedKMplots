@@ -522,3 +522,118 @@ cox_rhogamma_resample <- function(fit_rhogamma, i_bhat, K_wt_rg, i_zero, K_zero,
   }
 }
 
+
+plot_wt_rg <- function(atpoints, weights_list, labels,
+                       colors = NULL, ltys = NULL, lwds = NULL,
+                       xlab = "Time", ylab = "Weight w(t)",
+                       main = "Weight Functions", legend_pos = "topright",
+                       ylim = NULL, legend_cex = 0.9, ...) {
+  n <- length(weights_list)
+  if (is.null(colors)) colors <- 1:n
+  if (is.null(ltys)) ltys <- 1:n
+  if (is.null(lwds)) lwds <- rep(2, n)
+  if (is.null(ylim)) ylim <- range(unlist(weights_list), na.rm = TRUE)
+
+  plot(atpoints, weights_list[[1]], type = "s", lty = ltys[1], col = colors[1], lwd = lwds[1],
+       xlab = xlab, ylab = ylab, main = main, ylim = ylim, ...)
+  for (i in 2:n) {
+    lines(atpoints, weights_list[[i]], type = "s", lty = ltys[i], col = colors[i], lwd = lwds[i])
+  }
+  legend(legend_pos, legend = labels, lty = ltys, col = colors, lwd = lwds, bty = "n", cex = legend_cex)
+}
+
+extract_and_calc_weights_v2 <- function(atpoints, S.pool, scheme, weights_spec_list) {
+  # weights_spec_list: named list, each element is a list of scheme_params for get_weights
+  # Returns: data.frame with columns: time, weight, label
+  df_all <- do.call(rbind, lapply(names(weights_spec_list), function(lbl) {
+    scheme_params <- weights_spec_list[[lbl]]
+    wt <- get_weights(scheme, scheme_params, S.pool, tpoints = atpoints)
+    data.frame(time = atpoints, weight = wt, label = lbl, stringsAsFactors = FALSE)
+  }))
+  rownames(df_all) <- NULL
+  return(df_all)
+}
+
+
+plot_weight_functions <- function(df_weights,
+                                  xlab = "Time", ylab = "Weight w(t)",
+                                  main = "Weight Functions",
+                                  legend_pos = "topright",
+                                  colors = NULL, ltys = NULL, lwds = NULL, legend_cex = 0.9, ...) {
+  labels <- unique(df_weights$label)
+  n <- length(labels)
+  if (is.null(colors)) colors <- 1:n
+  if (is.null(ltys)) ltys <- 1:n
+  if (is.null(lwds)) lwds <- rep(2, n)
+  plot(NULL, xlim = range(df_weights$time), ylim = range(df_weights$weight, na.rm = TRUE),
+       xlab = xlab, ylab = ylab, main = main, ...)
+  for (i in seq_along(labels)) {
+    this_label <- labels[i]
+    this_df <- df_weights[df_weights$label == this_label, ]
+    lines(this_df$time, this_df$weight, type = "s", col = colors[i], lty = ltys[i], lwd = lwds[i])
+  }
+  legend(legend_pos, legend = labels, col = colors, lty = ltys, lwd = lwds, bty = "n", cex = legend_cex)
+}
+
+library(ggplot2)
+plot_weight_functions_gg <- function(df_weights) {
+  ggplot(df_weights, aes(x = time, y = weight, color = label, linetype = label)) +
+    geom_step(size = 1.2) +
+    labs(x = "Time", y = "Weight w(t)", color = "Weight", linetype = "Weight") +
+    theme_minimal()
+}
+
+
+# Suppose you have atpoints, S.pool, and get_weights defined
+weights_spec_list <- list(
+  "MB(12)" = list(scheme = "MB", mb_tstar = 12),
+  "MB(6)"  = list(scheme = "MB", mb_tstar = 6),
+  "MB(16)" = list(scheme = "MB", mb_tstar = 16),
+  "FH(0,1)" = list(scheme = "fh", rho = 0, gamma = 1),
+  "FH(-5,-5)" = list(scheme = "fh", rho = -5, gamma = -5)
+)
+
+# If your get_weights expects scheme as a separate argument, remove it from the list elements above.
+
+# Calculate weights
+df_weights <- extract_and_calc_weights_v2(atpoints, S.pool, scheme = NULL, weights_spec_list)
+
+# Plot (base R)
+plot_weight_functions(df_weights)
+
+# Plot (ggplot2)
+plot_weight_functions_gg(df_weights)
+
+
+extract_and_calc_weights_auto <- function(atpoints, S.pool, weights_spec_list) {
+  # weights_spec_list: named list, each element is a list of scheme_params (must include 'scheme')
+  # Returns: data.frame with columns: time, weight, label, scheme
+
+  df_all <- do.call(rbind, lapply(names(weights_spec_list), function(lbl) {
+    scheme_params <- weights_spec_list[[lbl]]
+    if (is.null(scheme_params$scheme)) stop(paste("Missing 'scheme' in weights_spec_list for", lbl))
+    scheme <- scheme_params$scheme
+    scheme_params$scheme <- NULL # Remove scheme from params for get_weights
+    wt <- get_weights(scheme, scheme_params, S.pool, tpoints = atpoints)
+    data.frame(time = atpoints, weight = wt, label = lbl, scheme = scheme, stringsAsFactors = FALSE)
+  }))
+  rownames(df_all) <- NULL
+  return(df_all)
+}
+
+weights_spec_list <- list(
+  "MB(12)"   = list(scheme = "MB", mb_tstar = 12),
+  "MB(6)"    = list(scheme = "MB", mb_tstar = 6),
+  "FH(0,1)"  = list(scheme = "fh", rho = 0, gamma = 1),
+  "XO"       = list(scheme = "XO", Ybar = rep(1, length(atpoints))) # Example for XO
+)
+
+df_weights <- extract_and_calc_weights_auto(atpoints, S.pool, weights_spec_list)
+
+# Plot with ggplot2
+library(ggplot2)
+ggplot(df_weights, aes(x = time, y = weight, color = label, linetype = scheme)) +
+  geom_step(size = 1.2) +
+  labs(x = "Time", y = "Weight w(t)", color = "Weight", linetype = "Scheme") +
+  theme_minimal()
+
