@@ -27,7 +27,7 @@ source('../R/df_counting_improved.R')
 # Load simulation results
 ```{r, include=TRUE}
 #load("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/vignettes/results/wCoxsims1_Linux_20k.RData")
-load("/media/larryleon/My Projects/GitHub/weightedKMplots/vignettes/results/wCoxsims1_Linux_20k.RData")
+load("/media/larryleon/My Projects/GitHub/weightedKMplots/vignettes/results/wCoxsims1_linux_50k.RData")
 ```
 
 
