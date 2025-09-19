@@ -304,6 +304,8 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
   # Pooled KM estimates at all timepoints for input to cox estimation
   risk_event <- calculate_risk_event_counts(time, delta, wgt, at_points_all)
   ans$survP_all <- KM_estimates(ybar = risk_event$ybar, nbar = risk_event$nbar, sig2w_multiplier = risk_event$sig2w_multiplier)$S_KM
+  ans$ybar_all <- risk_event$ybar
+  ans$nbar_all <- risk_event$nbar
   rm("risk_event")
   # Also the censoring distribution
   risk_event <- calculate_risk_event_counts(time, 1-delta, wgt, at_points_all)
