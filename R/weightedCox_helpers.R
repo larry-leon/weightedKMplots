@@ -131,6 +131,7 @@ plot_weight_schemes <- function(
       "FH(0.5,0.5)" = 1
     ),
     transform_fh = TRUE,
+    rescheme_fhexp2 = FALSE,
     save_plot = FALSE,
     filename = "weights_plot.png"
 ) {
@@ -141,12 +142,16 @@ plot_weight_schemes <- function(
 
   # Calculate weights
   df_weights <- extract_and_calc_weights(atpoints, S.pool, weights_spec_list)
-  df_weights$facet_group <- ifelse(df_weights$scheme == 'MB', 'MB', 'FH/FHexp2')
+
+
+  if(!rescheme_fhexp2) df_weights$facet_group <- ifelse(df_weights$scheme == 'MB', 'MB', 'FH/FHexp2')
+  if(rescheme_fhexp2) df_weights$facet_group <- ifelse(df_weights$scheme %in% c('MB','fh_exp2'), 'MB/FHexp2', 'FH')
 
   # Optionally transform weights for 'fh' schemes
   df_weights$weight_trans <- with(df_weights,
                                   if (transform_fh) ifelse(scheme %in% c("fh"), exp(weight), weight) else weight
   )
+
 
   # Plot
   library(ggplot2)

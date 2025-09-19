@@ -27,8 +27,8 @@ source('../R/df_counting_improved.R')
 
 
 ```{r, eval=FALSE}
-#load("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/vignettes/results/wCoxsims1_Linux_20k.RData")
-load("/media/larryleon/My Projects/GitHub/weightedKMplots/vignettes/results/wCoxsims1_Linux_20k.RData")
+load("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/vignettes/results/wCoxsims1_Linux_20k.RData")
+#load("/media/larryleon/My Projects/GitHub/weightedKMplots/vignettes/results/wCoxsims1_Linux_20k.RData")
 # Extract strong-null scenario
 library(simtrial)
 sim_setup <- res_out$get_setup 
@@ -66,8 +66,8 @@ if(z_rg > 1.96 & z_fh < 1.96) cat("Check this out=",c(ss),"\n")
 
 # Simulate example
 ```{r}
-#load("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/vignettes/results/wCoxsims1_Linux_20k.RData")
-load("/media/larryleon/My Projects/GitHub/weightedKMplots/vignettes/results/wCoxsims1_Linux_20k.RData")
+load("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/vignettes/results/wCoxsims1_Linux_20k.RData")
+#load("/media/larryleon/My Projects/GitHub/weightedKMplots/vignettes/results/wCoxsims1_Linux_20k.RData")
 # Extract strong-null scenario
 library(simtrial)
 sim_setup <- res_out$get_setup 
@@ -127,6 +127,12 @@ g <- plot_weight_schemes(dfcount)
 print(g)
 ```
 
+```{r, fig.width = 8, fig.height=6}
+g <- plot_weight_schemes(dfcount, transform_fh = FALSE, rescheme_fhexp2 = TRUE)
+print(g)
+```
+
+
 # Cumulative weighted log-rank statistics
 ```{r, fig.width = 8, fig.height=6}
 par(mfrow=c(2,2))
@@ -138,6 +144,8 @@ temp <- wlr_cumulative(dfcounting = dfcount, scheme_params = list(rho = 0, gamma
 
 with(temp, plot(time, z_cumulative, xlab="time", ylab="cumulative log-rank Z", type="s", ylim=c(ymin,ymax))
 )
+z01 <- temp$z_cumulative
+
 rm("temp")
 abline(h = qnorm(0.975), lwd=2, col="red")
 title(main="FH(0,1)")
@@ -163,7 +171,9 @@ abline(h = qnorm(0.975), lwd=2, col="red")
 title(main="MB(12)")
 
 
-plot(temp$time, z1-z2, xlab="time", ylab="FH_exp2 - MB", type="s")
+par(mfrow=c(1,2))
+plot(temp$time, z2-z1, xlab="time", ylab="MB - FH_exp2", type="s")
+plot(temp$time, z01-z1, xlab="time", ylab="FH(0,1) - FH_exp2", type="s")
 
 
 ```
