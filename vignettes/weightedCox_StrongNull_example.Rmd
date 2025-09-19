@@ -1,0 +1,96 @@
+---
+title: "Weighted Cox Example 1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, messages = FALSE)
+rm(list=ls())
+
+library(survival)
+library(weightedKMplots)
+library(tinytex)
+
+# Updated 
+source('../R/kmplotting_helpers.R')
+source('../R/km_calculations_helpers.R')
+source('../R/weightedCox_simulations_helpers.R')
+source('../R/weightedCox.R')
+source('../R/weightedCox_helpers.R')
+source('../R/df_counting_improved.R')
+
+```
+
+
+# Load simulation results
+```{r, include=TRUE}
+load("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/vignettes/results/wCoxsims1_Linux_20k.RData")
+
+# Extract strong-null scenario
+
+library(simtrial)
+
+sim_setup <- res_out$get_setup 
+
+# Simulation indexes where FH(0,1) rejects
+ids_strongnull <- res_out$index_strongnull
+
+
+
+# strong null
+dgm <- sim_setup$fr[c(14:17),]
+
+fail_rate <- data.frame(stratum = rep("All", 2 * nrow(dgm)),
+                          period = rep(dgm$Period, 2),
+                          treatment = c(rep("control", nrow(dgm)), 
+                                        rep("experimental", nrow(dgm))),
+                          duration = rep(dgm$duration, 2),
+                          rate = c(dgm$rate, dgm$rate * dgm$hr)
+                         )
+
+enroll_rate <- sim_setup$er 
+dropout_rate <- sim_setup$dropout_rate
+
+seedstart <- res_out$seedstart
+
+#seedstart <- 8316951
+
+sim_num <- ids_strongnull[2]
+
+set.seed(seedstart + 1000*sim_num)
+
+dat <- sim_pw_surv(n = 698, enroll_rate = enroll_rate,
+                     fail_rate = fail_rate, dropout_rate = dropout_rate)
+
+analysis_data <- cut_data_by_date(dat, 36)
+dfa <- analysis_data
+dfa$treat <- ifelse(dfa$treatment=="experimental",1,0)
+
+dfcount <- get_dfcounting(df=dfa, tte.name = "tte", event.name = "event", treat.name = "treat", arms = "treatment", by.risk= 6, rho=0, gamma=1)
+
+```
+
+
+
+```{r, fig.width = 8, fig.height=6}
+plot_weighted_km(dfcount=dfcount, conf.int=TRUE, show.logrank = TRUE, ymax = 1.05)
+title(main="Simulated data")
+```
+
+```{r}
+get_rg <- cox_rhogamma(dfcount = dfcount, scheme = "fh", scheme_params = list(rho = 0, gamma = 0), draws = 1000, verbose = TRUE)
+
+get_rg <- cox_rhogamma(dfcount = dfcount, scheme = "fh", scheme_params = list(rho = 0, gamma = 1), draws = 1000, verbose = TRUE)
+
+get_rg <- cox_rhogamma(dfcount = dfcount, scheme = "fh_exp2", draws = 1000, verbose = TRUE)
+
+get_rg <- cox_rhogamma(dfcount = dfcount, scheme = "MB", scheme_params = list(mb_tstar = 12), draws = 1000, verbose = TRUE)
+```
+
+
+```{r, fig.width = 8, fig.height=6}
+g <- plot_weight_schemes(dfcount)
+print(g)
+```
+
+

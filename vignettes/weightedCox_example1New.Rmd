@@ -139,6 +139,27 @@ lines(atpoints,e55,type="s",lty=2,col="blue",lwd=3)
 
 legend(1,2.5,c("mb(12)","mb(6)","mb(16)","e01=exp(FH(0,1))","e55=exp(FH(0.5,0.5))","eV15=min(e01,max(e55))"),lty=c(1,2,3,1,2,2),col=c("grey","grey","grey","green","blue","brown"),lwd=3,bty="n")
 
+
+# Example usage:
+weights_list <- list(mb12, mb6, mb16, exp(wt.01), eV15, e55)
+labels <- c("mb(12)", "mb(6)", "mb(16)", "e01=exp(FH(0,1))", "eV15", "e55")
+colors <- c("grey", "grey", "grey", "green", "brown", "blue")
+ltys <- c(1, 2, 3, 1, 2, 2)
+lwds <- c(3, 3, 3, 3, 3, 3)
+
+plot_wt_rg(atpoints, weights_list, labels, colors, ltys, lwds, legend_pos = "topright")
+library(ggplot2)
+library(reshape2)
+df <- data.frame(time = atpoints, mb12, mb6, mb16, e01 = exp(wt.01), eV15, e55)
+df_long <- melt(df, id.vars = "time")
+ggplot(df_long, aes(x = time, y = value, color = variable, linetype = variable)) +
+  geom_step(size = 1.2) +
+  labs(x = "Time", y = "Weight w(t)", color = "Weight", linetype = "Weight") +
+  theme_minimal() +
+  theme(legend.position = "top")
+
+
+
   
 ```
 

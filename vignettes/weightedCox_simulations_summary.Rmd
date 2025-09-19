@@ -1,0 +1,134 @@
+---
+title: "Weighted Cox Example 1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, messages = FALSE)
+rm(list=ls())
+library(survival)
+library(weightedKMplots)
+library(tinytex)
+
+library(dplyr)
+library(gt)
+
+# Updated 
+source('../R/kmplotting_helpers.R')
+source('../R/km_calculations_helpers.R')
+source('../R/weightedCox_simulations_helpers.R')
+source('../R/weightedCox.R')
+source('../R/weightedCox_helpers.R')
+source('../R/df_counting_improved.R')
+
+```
+
+
+# Load simulation results
+```{r, include=TRUE}
+load("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/vignettes/results/wCoxsims1_Linux_20k.RData")
+```
+
+
+
+# WLR and Wald tests (upper-bound < 1)
+
+```{r}
+
+results <- res_out$results_sims
+
+n_sim <- res_out$number_sims
+
+results$Scenario <- factor(results$Scenario, levels = 1:6,
+     labels = c("PH", "3m delay", "6m delay", "Crossing", "Weak null", "Strong null"))
+results |> group_by(Scenario) |> 
+  summarise("Cox" = mean(fh00_wald < 1.0),
+            "Cox*" = mean(fh00_waldstar < 1.0),
+            "fh00z" = mean(fh00z_mine > qnorm(0.975)),  
+            "FH05w" = mean(fh05_wald < 1.0),
+            "FH05w*" = mean(fh05_waldstar < 1.0),
+            "FH05z" = mean(fh05z_mine > qnorm(0.975)),
+            "FH01w" = mean(fh01_wald < 1.0),
+            "FH01w*" = mean(fh01_waldstar < 1.0),
+            "FH01z" = mean(fh01z_mine > qnorm(0.975)),
+            "MB(12)w" = mean(mb12_wald < 1.0),
+            "MB(12)w*" = mean(mb12_waldstar < 1.0),
+            "MB(12)z" = mean(mb12z_mine > qnorm(0.975)),
+            "FHe1w" = mean(fhe1_wald < 1.0),
+            "FHe1w*" = mean(fhe1_waldstar < 1.0),
+            "FHe1z" = mean(fhe1z > qnorm(0.975)),
+            "FHe2w" = mean(fhe2_wald < 1.0),
+            "FHe2w*" = mean(fhe2_waldstar < 1.0),
+            "FHe2z" = mean(fhe2z > qnorm(0.975))
+            ) |>
+  gt() |> fmt_number(columns = 2:18, decimals = 3)  
+
+```
+
+       
+# Hazard-ratio estimates
+
+```{r}
+
+results <- res_out$results_sims
+results$Scenario <- factor(results$Scenario, levels = 1:6,
+     labels = c("PH", "3m delay", "6m delay", "Crossing", "Weak null", "Strong null"))
+results |> group_by(Scenario) |> 
+  
+    summarise("Cox" = mean(exp(fh00_bhat), na.rm=TRUE),
+              "Coxdb" = mean(exp(fh00_bhatdebiased), na.rm=TRUE),
+              "se00" = sqrt(var(fh00_bhat, na.rm=TRUE)),
+              "se00h" = mean(fh00_sigbhat, na.rm=TRUE),
+              "se00h*" = mean(fh00_sigbhatstar, na.rm = TRUE),
+              "C00_75" = mean(fh00_cover, na.rm = TRUE),
+              "FH01" = mean(exp(fh01_bhat), na.rm=TRUE),
+              "FH01db" = mean(exp(fh01_bhatdebiased), na.rm=TRUE),
+              "se01" = sqrt(var(fh01_bhat, na.rm=TRUE)),
+              "se01h" = mean(fh01_sigbhat, na.rm=TRUE),
+              "se01h*" = mean(fh01_sigbhatstar, na.rm = TRUE),
+              "C01_75" = mean(fh01_cover, na.rm = TRUE)
+            ) |>
+  gt() |> fmt_number(columns = 2:13, decimals = 3)  
+
+```
+
+       
+
+# Weighted log-rank statistics
+
+
+```{r}
+
+results <- res_out$results_sims
+results$Scenario <- factor(results$Scenario, levels = 1:6,
+     labels = c("PH", "3m delay", "6m delay", "Crossing", "Weak null", "Strong null"))
+results |> group_by(Scenario) |> 
+  summarise("logrank" = mean(logrankz > qnorm(0.975)),
+            "fh00*" = mean(fh00z_mine > qnorm(0.975)),  
+            "FH05" = mean(fh05z > qnorm(0.975)),
+            "FH05*" = mean(fh05z_mine > qnorm(0.975)),
+            "FH01" = mean(fh01z > qnorm(0.975)),
+            "FH01*" = mean(fh01z_mine > qnorm(0.975)),
+            "FH01db" = mean(fh01z_debiased > qnorm(0.975)),
+            "MB(6)" = mean(mb6z > qnorm(0.975)),
+            "MB(6)*" = mean(mb6z_mine > qnorm(0.975)),
+            "MB(12)" = mean(mb12z > qnorm(0.975)),
+            "MB(12)*" = mean(mb12z_mine > qnorm(0.975)),
+            "MB(16)" = mean(mb16z > qnorm(0.975)),
+            "MB(16)*" = mean(mb16z_mine > qnorm(0.975)),
+            "FHexp1" = mean(fhe1z > qnorm(0.975)),
+            "FHexp2" = mean(fhe2z > qnorm(0.975)),
+            "maxcombbo" = mean(maxcombop <= 0.025)
+            ) |>
+  gt() |> fmt_number(columns = 2:16, decimals = 3)  
+
+```
+
+
+
+## Simulations
+
+Simulations below are based on `r prettyNum(n_sim, big.mark=",")` trials simulated for each result. Type-1 error upper bounds are `r round(0.025 + 1.96*sqrt(0.025*0.975/n_sim),4)` and 
+`r round(0.05 + 1.96*sqrt(0.05*0.95/n_sim),4)` for $2.5\%$ (1-sided) and $5\%$ (2-sided) alpha-levels.  
+
+
