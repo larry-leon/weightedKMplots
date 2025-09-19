@@ -108,12 +108,19 @@ library(survival)
 # library(devtools)
 # github_install("larry-leon/weightedKMplots")
 library(weightedKMplots)
-# source revised functions (to be updated in weightedKMplots)
-source("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/R/df_counting_improved.R")
-source("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/R/km_calculations_helpers.R")
-source("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/R/kmplotting_helpers.R")
+
+
+# Updated 
+source('../R/kmplotting_helpers.R')
+source('../R/km_calculations_helpers.R')
+source('../R/weightedCox_simulations_helpers.R')
+source('../R/weightedCox.R')
+source('../R/weightedCox_helpers.R')
+source('../R/df_counting_improved.R')
+
+
 #survminer is only used for 1 plot comparison
-library(survminer)
+#library(survminer)
 ```
 ---- Data Preparation ----
 Prepare GBSG data
@@ -149,7 +156,7 @@ title(main="GBSG (trial) data un-weighted
       via survfit")
 ```
 
-Compare with survminer
+Include 95\% CIs
 
 ```{r, fig.width = 8, fig.height=6}
 plot_weighted_km(dfcount=dfcount_gbsg, conf.int=TRUE, show.logrank = TRUE, ymax = 1.05)

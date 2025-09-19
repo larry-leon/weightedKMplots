@@ -782,50 +782,6 @@ if(show_resamples){
   )
 }
 
-#' Score test statistic for survival data
-#' @param nbar0 Number of events in group 0.
-#' @param ybar0 Number at risk in group 0.
-#' @param nbar1 Number of events in group 1.
-#' @param ybar1 Number at risk in group 1.
-#' @return List with z-score, score, and variance.
-#' @export
-z_score_calculations_old <- function(nbar0, ybar0, nbar1, ybar1, rho = 0, gamma = 0, S_pool = NULL){
-w <- rep(1, length(nbar0))
-if( rho != 0.0 | gamma != 0.0){
-  if(is.null(S_pool)){
-    ybar <- ybar0 + ybar1
-    nbar <- nbar0 + nbar1
-    dN <- diff(c(0,nbar))
-    dN_Risk <- ifelse(ybar > 0, dN / ybar, 0)
-    S_pool <- cumprod(1 - dN_Risk)
-    S_pool <- c(1, S_pool[-length(S_pool)]) # S_pool(t-)
-  }
- if(!is.null(S_pool)) S_pool <- c(1, S_pool[-length(S_pool)])
- w <- (S_pool^rho) * ((1 - S_pool)^gamma)
-}
-  # score test statistic
-  dN.z1 <- diff(c(0, nbar1))
-  dN.z0 <- diff(c(0, nbar0))
-  num <- w * ybar1 * ybar0
-  den <- ybar1 + ybar0
-  K <- ifelse(den > 0, num / den, 0.0)
-  drisk1 <- ifelse(ybar1 > 0, dN.z1 / ybar1, 0.0)
-  drisk0 <- ifelse(ybar0 > 0, dN.z0 / ybar0, 0.0)
-  score <- sum(K * (drisk0 - drisk1))
-  i.bhat <- sum(ifelse(den > 0, (num / (den^2)) * (dN.z0 + dN.z1), 0.0))
-  DNbar <- dN.z0 + dN.z1
-  h1 <- ifelse(ybar1 > 0, (K^2 / ybar1), 0.0)
-  h2 <- ifelse(ybar0 > 0, (K^2 / ybar0), 0.0)
-  temp <- c(den - 1)
-  ybar_mod <- ifelse(temp < 1, 1, temp)
-  dH1 <- ifelse(ybar_mod > 0, (DNbar-1) / ybar_mod, 0.0)
-  dH2 <- ifelse(den > 0, DNbar / den, 0.0)
-  sig2s <- (h1+h2)*(1-dH1)*dH2
-  sig2U.bzero <- sum(sig2s)
-  z.score <- score / sqrt(sig2U.bzero)
-  return(list(z.score=z.score, score=score, sig2.score=sig2U.bzero))
-}
-
 #' Weighted Z-Score Calculation for Survival Analysis
 #'
 #' Computes the weighted z-score and its variance for two groups, using flexible time-dependent weights.
@@ -913,3 +869,53 @@ z_score_calculations <- function(nbar0, ybar0, nbar1, ybar1, S_pool = NULL, rho 
   z.score <- score / sqrt(sig2U.bzero)
   return(list(z.score=z.score, score=score, sig2.score=sig2U.bzero))
   }
+
+
+wlr_cumulative <- function(dfcounting, scheme_params = list(rho = 0, gamma = 0.5), scheme = "fh") {
+  at_points <- dfcounting$at.points
+  nbar0 <- dfcounting$nbar0
+  nbar1 <- dfcounting$nbar1
+  ybar0 <- dfcounting$ybar0
+  ybar1 <- dfcounting$ybar1
+  S1 <- dfcounting$surv1
+  S0 <- dfcounting$surv0
+  S.pool <- dfcounting$survP
+  dN_z0 <- diff(c(0, nbar0))
+  dN_z1 <- diff(c(0, nbar1))
+  dN_pooled <- dN_z0 + dN_z1
+  risk_z1 <- ybar1
+  risk_z0 <- ybar0
+  risk_pooled <- risk_z0 + risk_z1
+
+
+  # Validate scheme and parameters
+  supported_schemes <- c("fh", "schemper", "XO", "MB", "custom_time", "fh_exp1", "fh_exp2")
+  if (!(scheme %in% supported_schemes)) {
+    stop("scheme must be one of: ", paste(supported_schemes, collapse = ", "))
+  }
+
+  if(scheme == "MB"){
+    if(is.null(scheme_params$mb_tstar)){
+      cat("Missing mb_tstar argument in scheme_params you have:", paste(names(scheme_params), collapse = ", "), "\n")
+    }
+    scheme_params <- list(mb_tstar = scheme_params$mb_tstar, tpoints = at_points)
+  }
+
+  validate_scheme_params(scheme, scheme_params, S.pool, tpoints = at_points)
+
+  # Calculate weights
+  wt_rg <- get_weights(scheme, scheme_params, S.pool, tpoints = at_points)
+
+  K <- ifelse(risk_pooled > 0, wt_rg * (risk_z0 * risk_z1) / risk_pooled, 0.0)
+  drisk0 <- cumsum(ifelse(risk_z0 > 0, (K / risk_z0) * dN_z0, 0.0))
+  drisk1 <- cumsum(ifelse(risk_z1 > 0, (K / risk_z1) * dN_z1, 0.0))
+  lr <- drisk0 - drisk1
+  h0 <- ifelse(risk_z0 == 0, 0, (K^2 / risk_z0))
+  h1 <- ifelse(risk_z1 == 0, 0, (K^2 / risk_z1))
+  dJ <- ifelse(risk_pooled == 1, 0, (dN_pooled - 1) / (risk_pooled - 1))
+  dL <- ifelse(risk_pooled == 0, 0, dN_pooled / risk_pooled)
+  sig2_lr <- cumsum((h0 + h1) * (1 - dJ) * dL)
+  z <- lr / sqrt(sig2_lr)
+    list(z_cumulative = z, time = at_points, lr_cumulative = lr, sig2_cumulative = sig2_lr
+  )
+}

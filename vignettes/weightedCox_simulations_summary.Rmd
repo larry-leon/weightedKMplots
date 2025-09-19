@@ -26,7 +26,8 @@ source('../R/df_counting_improved.R')
 
 # Load simulation results
 ```{r, include=TRUE}
-load("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/vignettes/results/wCoxsims1_Linux_20k.RData")
+#load("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/vignettes/results/wCoxsims1_Linux_20k.RData")
+load("/media/larryleon/My Projects/GitHub/weightedKMplots/vignettes/results/wCoxsims1_Linux_20k.RData")
 ```
 
 
@@ -38,6 +39,7 @@ load("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weigh
 results <- res_out$results_sims
 
 n_sim <- res_out$number_sims
+time_inhours <- res_out$thours
 
 results$Scenario <- factor(results$Scenario, levels = 1:6,
      labels = c("PH", "3m delay", "6m delay", "Crossing", "Weak null", "Strong null"))
@@ -129,6 +131,6 @@ results |> group_by(Scenario) |>
 ## Simulations
 
 Simulations below are based on `r prettyNum(n_sim, big.mark=",")` trials simulated for each result. Type-1 error upper bounds are `r round(0.025 + 1.96*sqrt(0.025*0.975/n_sim),4)` and 
-`r round(0.05 + 1.96*sqrt(0.05*0.95/n_sim),4)` for $2.5\%$ (1-sided) and $5\%$ (2-sided) alpha-levels.  
+`r round(0.05 + 1.96*sqrt(0.05*0.95/n_sim),4)` for $2.5\%$ (1-sided) and $5\%$ (2-sided) alpha-levels.   The computational time was `r round(time_inhours,2)` hours.
 
 

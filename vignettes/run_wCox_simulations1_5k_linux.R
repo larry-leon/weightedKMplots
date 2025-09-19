@@ -1,4 +1,28 @@
+rm(list=ls())
+library(survival)
+library(weightedKMplots)
 
+# load these prior
+source("R/kmplotting_helpers.R")
+source("R/df_counting_improved.R")
+source("R/km_calculations_helpers.R")
+source("R/weightedCox.R")
+source("R/weightedCox_helpers.R")
+source("R/weightedCox_simulations_helpers.R")
+
+
+library(gsDesign2)
+library(dplyr)
+library(tibble)
+library(gt)
+library(simtrial)
+library(tidyr)
+library(doFuture)
+library(foreach)
+library(tictoc)
+library(data.table)
+
+library(future.callr)
 
 
 sims_setup <- function(surv_24 = 0.35, hr_true = log(0.35) / log(0.25), control_median = 12){
@@ -82,27 +106,10 @@ ans$dropout_rate <- dropout_rate
 return(ans)
 }
 
-
-
-
-
-#these_sims <- get_sims(n_sim = 20, save_results = TRUE, file_togo = "vignettes/results/test.Rdata")
-
-
-# results <- these_sims$results_sims
-# results$Scenario <- factor(results$Scenario, levels = 1:6,
-# labels = c("PH", "3m delay", "6m delay", "Crossing", "Weak null", "Strong null"))
-# results |> group_by(Scenario) |>
-#   summarise("logrank" = mean(Logrank <= qnorm(0.025)),
-#             "FH05" = mean(FH05 <= qnorm(0.025)),
-#             "FH01" = mean(FH01 <= qnorm(0.025)),
-#             "FH01*" = mean(1 - pnorm(FH01mine) <= 0.025),
-#             "MB(6)" = mean(1-pnorm(MB6) <= 0.025),
-#             "MB(12)" = mean(1-pnorm(MB12) <= 0.025),
-#             "MB(12)*" = mean(1-pnorm(MB12mine) <= 0.025),
-#             "MB(16)" = mean(1-pnorm(MB16) <= 0.025),
-#             "FHexp2" = mean(1-pnorm(FHexp2) <= 0.025),
-#             "maxcombbo" = mean(MaxCombo <= 0.025)
-# ) |>
-#   gt() |> fmt_number(columns = 2:10, decimals = 3)
+# Last n_sim was 10000:  For seedstart to append to last n_sims
+n_last <- 0
+n_now <- 100
+seedstart <- 8316951 + 1000*n_last
+these_sims <- get_sims(n_sim = n_now, seedstart = seedstart, num_workers = 100, mart_draws = 500, save_results = TRUE,
+                       file_togo = "vignettes/results/wCoxsims1_linux_1k.RData")
 

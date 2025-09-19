@@ -44,6 +44,7 @@ fail_rate <- data.frame(stratum = rep("All", 2 * nrow(fr)),
                           duration = rep(fr$duration, 2),
                           rate = c(fr$rate, fr$rate * fr$hr)
   )
+
   # Generate a dataset
   set.seed(seedstart + 1000*sim_num)
 
