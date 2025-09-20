@@ -210,12 +210,9 @@ get_sims <- function(n_sim, dof_approach = "callr", num_workers = 4,  seedstart 
 
   if(verbose) cat("Nsims, timing minutes =", c(n_sim, round(elapsed_seconds / 60, 2)), "\n")
 
-  # Extract indexes where FH(0,1) rejects but FHexp2 does not under strong-null
-  temp <- subset(results_sims, Scenario == 6)
-  index_ofinterest <- with(temp, which(fh01z_mine > qnorm(0.975) & fhe2z <= qnorm(0.975)))
 
   res_out <- list(get_setup = get_setup, results_sims = results_sims, tminutes = c(elapsed_seconds / 60), thours = c(elapsed_seconds / (60^2)),
-                  number_sims = n_sim, index_strongnull = index_ofinterest, hr_target = hr_PH, seedstart = seedstart)
+                  number_sims = n_sim, hr_target = hr_PH, seedstart = seedstart)
 
   if(save_results) save(res_out, file = file_togo)
 

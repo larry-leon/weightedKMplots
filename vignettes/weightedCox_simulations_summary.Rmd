@@ -14,12 +14,20 @@ library(dplyr)
 library(gt)
 
 # Updated 
-source('../R/kmplotting_helpers.R')
-source('../R/km_calculations_helpers.R')
-source('../R/weightedCox_simulations_helpers.R')
-source('../R/weightedCox.R')
-source('../R/weightedCox_helpers.R')
-source('../R/df_counting_improved.R')
+# source('../R/kmplotting_helpers.R')
+# source('../R/km_calculations_helpers.R')
+# source('../R/weightedCox_simulations_helpers.R')
+# source('../R/weightedCox.R')
+# source('../R/weightedCox_helpers.R')
+# source('../R/df_counting_improved.R')
+
+source("R/kmplotting_helpers.R")
+source("R/df_counting.R")
+source("R/df_counting_helpers.R")
+source("R/km_wlr_calculations_helpers.R")
+source("R/weightedCox.R")
+source("R/weighted_helpers.R")
+source("R/weightedCox_simulations_helpers.R")
 
 ```
 
@@ -27,7 +35,7 @@ source('../R/df_counting_improved.R')
 # Load simulation results
 ```{r, include=TRUE}
 #load("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/vignettes/results/wCoxsims1_Linux_20k.RData")
-load("/media/larryleon/My Projects/GitHub/weightedKMplots/vignettes/results/wCoxsims1_linux_50k.RData")
+load("/media/larryleon/My Projects/GitHub/weightedKMplots/vignettes/results/wCoxsims1_linux_1k.RData")
 ```
 
 
