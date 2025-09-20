@@ -107,7 +107,7 @@ ans$dropout_rate <- dropout_rate
 return(ans)
 }
 
-n_now <- 5000
+n_now <- 1000
 
 these_sims <- get_sims(n_sim = n_now, seedstart = 8316951, num_workers = 100, mart_draws = 500, save_results = TRUE,
                        file_togo = "vignettes/results/wCoxsims1_linux_1k.RData")
