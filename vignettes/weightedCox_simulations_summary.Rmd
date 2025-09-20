@@ -130,7 +130,7 @@ results |> group_by(Scenario) |>
 
 ## Simulations
 
-Simulations below are based on `r prettyNum(n_sim, big.mark=",")` trials simulated for each result. Type-1 error upper bounds are `r round(0.025 + 1.96*sqrt(0.025*0.975/n_sim),4)` and 
+Simulations are based on `r prettyNum(n_sim, big.mark=",")` trials simulated for each result. Type-1 error upper bounds are `r round(0.025 + 1.96*sqrt(0.025*0.975/n_sim),4)` and 
 `r round(0.05 + 1.96*sqrt(0.05*0.95/n_sim),4)` for $2.5\%$ (1-sided) and $5\%$ (2-sided) alpha-levels.   The computational time was `r round(time_inhours,2)` hours.
 
 

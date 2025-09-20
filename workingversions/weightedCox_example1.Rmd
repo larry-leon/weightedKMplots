@@ -1,0 +1,312 @@
+---
+title: "Weighted Cox Example 1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+rm(list=ls())
+library(survival)
+library(weightedKMplots)
+```
+
+# Setup gbsg and rotterdam datasets
+```{r, include=TRUE}
+df <- gbsg
+df$treat <- df$hormon
+# rfstime is time to recurrence in days
+# convert to months
+df$time_months <- df$rfstime/30.4375 
+df_gbsg <- df 
+
+# Following Therneau example
+gbsg_validate <-within(rotterdam,{
+  rfstime <- ifelse(recur==1,rtime,dtime)
+  #rfstime <- pmin(rtime,dtime)
+  t_months<-rfstime/30.4375
+  time_months <- t_months
+  status <- pmax(recur,death)
+  # censor if beyond 84 months ?
+  #time_months <- pmin(t_months,84)
+  #status <- ifelse(status==1 & t_months <= 84,1,0)
+  # Second version (conservative per Therneau)
+  ignore <- (recur==0 & death==1 & rtime < dtime)
+  status2 <- ifelse(recur==1 | ignore, recur, death)
+  rfstime2 <- ifelse(recur==1 | ignore, rtime,dtime)
+  time_months2 <- rfstime2/30.4375
+  grade3 <- ifelse(grade=="3",1,0)
+  treat <- hormon
+  id<-as.numeric(c(1:nrow(rotterdam)))  
+  SG0 <- ifelse(er<=0,0,1)
+})
+# Check subject 40 who was censored at recurrence but death afterwards
+# Event at 6.6 years
+#subset(gbsg_validate,pid==40)
+# node positive to match gbsg?
+df <- subset(gbsg_validate, nodes > 0)
+fit.ps <- glm(treat ~ age+meno+size+grade3+nodes+pgr+chemo+er, data = df, family="binomial")
+pihat <- fit.ps$fitted
+pihat.null <- glm(treat ~ 1, family = "binomial", data = df)$fitted
+wt.1 <- pihat.null/pihat
+wt.0 <- (1-pihat.null)/(1-pihat)
+# Stabilized weight
+df$sw.weights <- ifelse(df$treat == 1, wt.1,wt.0)
+
+df_rotterdam <- df
+
+tte.name<-c("time_months")
+event.name<-c("status")
+treat.name<-c("treat")
+arms <- c("treat","control")
+
+# Weighting for rotterdam data 
+wt.name <- c("sw.weights")
+
+```
+
+
+```{r}
+compare_cox_models <- function(df,res_draws=20) {
+  if (!requireNamespace("survival", quietly = TRUE)) stop("Package 'survival' is required.")
+  library(survival)
+  
+  # Standard Cox model
+  fit_coxph <- coxph(Surv(time_months, status) ~ treat, data = df, robust=TRUE)
+  sum_coxph <- summary(fit_coxph)
+  
+  # Weighted Cox model (if weights are present)
+  if ("sw.weights" %in% names(df)) {
+    fit_coxph_wt <- coxph(Surv(time_months, status) ~ treat, weights = sw.weights, data = df, robust=TRUE)
+    sum_coxph_wt <- summary(fit_coxph_wt)
+  } else {
+    fit_coxph_wt <- NULL
+    sum_coxph_wt <- NULL
+  }
+  
+# cox_rhogamma model (unweighted)
+  fit_rhogamma <- cox_rhogamma(time = df$time_months, delta = df$status, z = df$treat, rho = 0, gamma = 0)
+# Using vectorized calculations
+cox_res <- cox_rhogamma_resample(fit_rhogamma$bhat, time=df$time_months, delta=df$status, z=df$treat, 
+                                 draws = res_draws, parallel=FALSE)
+ses_res <- c(unlist(cox_res[c("se.beta.asy","se.beta")]))
+  
+  # cox_rhogamma model (weighted)
+  if ("sw.weights" %in% names(df)) {
+    fit_rhogamma_wt <- cox_rhogamma(time = df$time_months, delta = df$status, z = df$treat, w_hat = df$sw.weights, rho = 0, gamma = 0)
+    cox_res_wt <- cox_rhogamma_resample(fit_rhogamma_wt$bhat, time=df$time_months, delta=df$status, 
+                                        z=df$treat, w_hat =df$sw.weights, draws = res_draws, parallel=FALSE)
+    ses_res_wt <- c(unlist(cox_res_wt[c("se.beta.asy","se.beta")]))
+  } else {
+    fit_rhogamma_wt <- NULL
+    ses_res_wt <- NULL
+  }
+  
+  # Print results
+  cat("coxph HR:", exp(coef(fit_coxph)), "\n")
+  cat("coxph SE (asy,robust):", sum_coxph$coefficients[, c("se(coef)","robust se")], "\n")
+  cat("cox_rhogamma HR:", exp(fit_rhogamma$bhat), "\n")
+  cat("cox_rhogamma asy and resampling", c(ses_res), "\n")
+ 
+  if (!is.null(fit_coxph_wt)) {
+    cat("coxph weighted HR:", exp(coef(fit_coxph_wt)), "\n")
+    cat("coxph weighted SE:", sum_coxph_wt$coefficients[, c("se(coef)","robust se")], "\n")
+  }
+     if (!is.null(fit_rhogamma_wt)) {
+    cat("cox_rhogamma weighted HR:", exp(fit_rhogamma_wt$bhat), "\n")
+    cat("cox_rhogamma asy and resampling", c(ses_res_wt), "\n")
+      }
+  invisible(list(
+    coxph = fit_coxph,
+    coxph_wt = fit_coxph_wt,
+    rhogamma = fit_rhogamma,
+    rhogamma_wt = fit_rhogamma_wt
+  ))
+}
+
+```
+
+
+# Example: Weighted Cox Model and Extensions
+
+```{r weighted-cox-example, eval=FALSE}
+compare_cox_models(df_rotterdam,res_draws=1000)
+# artificially consider grade as sw.weights for gbsg
+df_gbsg$sw.weights <- df_gbsg$grade+1
+compare_cox_models(df_gbsg,res_draws=1000)
+```
+
+# Example: Combo weighted log-rank
+
+```{r, eval=FALSE}
+
+df <- df_gbsg
+
+system.time(
+test_result <- combo_logrank(
+time = df$time_months, delta = df$status, z = df$treat,
+draws = 1000,
+rho_gamma = list(c(0,0), c(1,0), c(1,1))
+)
+)
+str(test_result)
+
+
+pval <- with(test_result, mean(Z_combo_star >= Z_combo))
+pval
+
+# 0,0
+fit_rhogamma <- cox_rhogamma(time = df$time_months, delta = df$status, z = df$treat, rho = 0, gamma = 0)
+exp(fit_rhogamma$bhat)
+# Score at beta=0
+cox_res <- cox_rhogamma_resample(0.0, time=df$time_months, delta=df$status, z=df$treat, rho = 0, gamma = 0,
+draws = 0, parallel=FALSE)
+with(cox_res,score.obs/sqrt(sig2U.bzero))
+test_result$Z_rg_obs[1]
+res <- df_counting(df=df, tte.name=tte.name, event.name=event.name, treat.name=treat.name, 
+                   arms=arms, rho = 0, gamma = 0)
+with(res,z.score)
+with(res,lr/sqrt(sig2_lr))
+
+# 1,0
+fit_rhogamma <- cox_rhogamma(time = df$time_months, delta = df$status, z = df$treat, rho = 1, gamma = 0)
+exp(fit_rhogamma$bhat)
+# Score at beta=0
+cox_res <- cox_rhogamma_resample(0.0, time=df$time_months, delta=df$status, z=df$treat, rho = 1, gamma = 0, draws = 0)
+with(cox_res,score.obs/sqrt(sig2U.bzero))
+test_result$Z_rg_obs[2]
+res <- df_counting(df=df, tte.name=tte.name, event.name=event.name, treat.name=treat.name, 
+                   arms=arms, rho = 1, gamma = 0)
+with(res,z.score)
+with(res,lr/sqrt(sig2_lr))
+
+
+system.time(cox_res <- cox_rhogamma_resample(0.0, time=df$time_months, delta=df$status, z=df$treat, rho = 1, gamma = 0, draws = 20000, parallel=FALSE))
+c(unlist(cox_res[c("se.beta.asy","se.beta")]))
+
+# system.time(cox_res <- cox_rhogamma_resample(0.0, time=df$time_months, delta=df$status, z=df$treat, rho = 1, gamma = 0,
+# draws = 20000, parallel = TRUE, workers=8))
+# c(unlist(cox_res[c("se.beta.asy","se.beta")]))
+
+system.time(cox_res <- cox_rhogamma_resample(0.0, time=df$time_months, delta=df$status, z=df$treat, rho = 1, gamma = 0,
+draws = 100*1000, parallel=FALSE))
+c(unlist(cox_res[c("se.beta.asy","se.beta")]))
+
+# Original functions
+#cox_res_old <- fit.cox.rhogamma(time=df$time_months,delta = df$status, z = df$treat,rho = 1,gamma = 0)
+
+```
+
+
+
+# KM plots  
+
+
+```{r, fig.width = 10, fig.height = 8}
+df <- df_rotterdam
+
+dfcount.wt <- df_counting(df=df, tte.name, event.name, treat.name, weight.name = wt.name, arms = arms, 
+                          by.risk=24,cox.digits=3, lr.digits=3,qprob=0.50, check.KM = FALSE)
+
+km_fit <- survfit(Surv(time_months,status) ~ hormon, weights= sw.weights, data=df)
+
+par(mfrow=c(1,2))
+KM_plot_2sample_weighted_counting(dfcount=dfcount.wt,risk.cex=0.725,risk_offset=0.125, risk_delta=0.05, 
+                                  show.cox=TRUE,show.logrank=FALSE,show.med=TRUE, med.font=4)
+plot(km_fit,mark.time=TRUE)
+
+
+```
+
+
+```{r, fig.width = 8, fig.height = 6}
+# Compare with adjustedCurves
+library(adjustedCurves)
+library(pammtools)
+
+df_rotterdam$hormon2 <- with(df_rotterdam, factor(hormon, labels=c("No","Yes")))
+
+ps_model <- glm(hormon2 ~ age+meno+size+grade+nodes+pgr+chemo+er, data = df_rotterdam, family="binomial")
+
+iptw <- adjustedsurv(data=df_rotterdam, variable="hormon2", ev_time="time_months", event = "status", method = "iptw_km", treatment_model = ps_model, conf_int = TRUE)
+
+plot(iptw, conf_int = TRUE, legend.title = "Hormonal \ n Therapy")
+
+KM_plot_2sample_weighted_counting(dfcount=dfcount.wt,risk.cex=0.725,risk_offset=0.125, risk_delta=0.05, xmed.fraction = 0.75, 
+                                  show.cox=TRUE,show.logrank=FALSE,show.med=TRUE, med.font=4,conf.int = TRUE)
+
+
+
+
+```
+
+
+```{r, fig.width = 10, fig.height = 8}
+# Check SEs
+par(mfrow=c(1,2))
+
+df_check <- subset(iptw$adj, group == "No")
+df_mine <- dfcount.wt
+yymax <- max(c(sqrt(df_mine$sig2_surv0[df_mine$idv0.check]), df_check$se))
+toget <- df_mine$idv0.check
+tt <- df_mine$at.points[toget]
+yy <- sqrt(df_mine$sig2_surv0)[toget]
+plot(tt,yy, type="s", lty=1, col="lightgrey", lwd=4, ylim=c(0,yymax), xlab="time", ylab="SEs")
+with(df_check, lines(time, se, type="s", lty=2, lwd=1, col="red"))
+title(main="Control SEs")
+
+
+df_check <- subset(iptw$adj, group == "Yes")
+df_mine <- dfcount.wt
+yymax <- max(c(sqrt(df_mine$sig2_surv1[df_mine$idv1.check]), df_check$se))
+toget <- df_mine$idv1.check
+tt <- df_mine$at.points[toget]
+yy <- sqrt(df_mine$sig2_surv1)[toget]
+plot(tt,yy, type="s", lty=1, col="lightgrey", lwd=4, ylim=c(0,yymax), xlab="time", ylab="SEs")
+with(df_check, lines(time, se, type="s", lty=2, lwd=1, col="red"))
+title(main = "Treat SEs")
+
+```
+
+
+```{r, fig.width = 8, fig.height = 6}
+
+with(df_rotterdam, summary(sw.weights))
+with(subset(df_rotterdam, treat == 1), summary(sw.weights))
+with(subset(df_rotterdam, treat == 0), summary(sw.weights))
+
+df_rotterdam$sw.weights2 <- with(df_rotterdam, ifelse(sw.weights >= 1.5, 1.5, sw.weights))
+
+res <- df_counting(df=df_rotterdam, tte.name=tte.name, event.name=event.name, treat.name=treat.name,
+weight.name = "sw.weights", arms=arms, rho = 0, gamma = 0)
+with(res,z.score)
+with(res,lr/sqrt(sig2_lr))
+# For case weights compare with Coxph (survdiff does not allow for case weights)
+with(res,z.score^2)
+with(res,cox_results$score)
+
+```
+
+
+```{r, fig.width = 8, fig.height = 6}
+# For illustration artificially naming nodes+1 as "sw.weights"
+df_gbsg$sw.weights <- with(df_gbsg, nodes + 1)
+
+with(df_gbsg, summary(sw.weights))
+with(subset(df_gbsg, treat == 1), summary(sw.weights))
+with(subset(df_gbsg, treat == 0), summary(sw.weights))
+
+res <- df_counting(df=df_gbsg, tte.name=tte.name, event.name=event.name, treat.name=treat.name,
+weight.name = "sw.weights", arms=arms, rho = 0, gamma = 0)
+with(res,z.score)
+with(res,lr/sqrt(sig2_lr))
+# For case weights compare with Coxph (survdiff does not allow for case weights)
+with(res,z.score^2)
+with(res,cox_results$score)
+
+par(mfrow=c(1,1))
+KM_plot_2sample_weighted_counting(dfcount=res,risk.cex=0.725,risk_offset=0.125, risk_delta=0.05, xmed.fraction = 0.8,
+                                  show.cox=TRUE,show.logrank=FALSE,show.med=TRUE, med.font=4,conf.int = TRUE)
+
+
+
+```

@@ -109,14 +109,18 @@ library(survival)
 # github_install("larry-leon/weightedKMplots")
 library(weightedKMplots)
 
-
 # Updated 
 source('../R/kmplotting_helpers.R')
-source('../R/km_calculations_helpers.R')
 source('../R/weightedCox_simulations_helpers.R')
+
 source('../R/weightedCox.R')
-source('../R/weightedCox_helpers.R')
-source('../R/df_counting_improved.R')
+source('../R/weighted_helpers.R')
+
+source('../R/df_counting.R')
+source('../R/df_counting_helpers.R')
+
+source('../R/km_wlr_calculations_helpers.R')
+
 
 
 #survminer is only used for 1 plot comparison
@@ -383,7 +387,7 @@ df_mine <- dfcount_rotterdam_wtd
 df_check <- subset(iptw$adj, group == "No")
 yymax <- max(c(sqrt(df_mine$sig2_surv0[df_mine$idv0.check]), df_check$se))
 toget <- df_mine$idv0.check
-tt <- df_mine$at.points[toget]
+tt <- df_mine$at_points[toget]
 yy <- sqrt(df_mine$sig2_surv0)[toget]
 plot(tt,yy, type="s", lty=1, col="lightgrey", lwd=4, ylim=c(0,yymax), xlab="time", ylab="SEs")
 with(df_check, lines(time, se, type="s", lty=2, lwd=1, col="red"))
@@ -393,7 +397,7 @@ title(main="Control SEs")
 df_check <- subset(iptw$adj, group == "Yes")
 yymax <- max(c(sqrt(df_mine$sig2_surv1[df_mine$idv1.check]), df_check$se))
 toget <- df_mine$idv1.check
-tt <- df_mine$at.points[toget]
+tt <- df_mine$at_points[toget]
 yy <- sqrt(df_mine$sig2_surv1)[toget]
 plot(tt,yy, type="s", lty=1, col="lightgrey", lwd=4, ylim=c(0,yymax), xlab="time", ylab="SEs")
 with(df_check, lines(time, se, type="s", lty=2, lwd=1, col="red"))
@@ -410,7 +414,7 @@ title(main = "Treat SEs")
 # (3) z_score_calculations function (from a Cox score-test perspective)
 check_results(dfcount_gbsg)
 # Check wlr_dhat_estimates which calculates from any scheme based on counting dataset 
-temp <- wlr_dhat_estimates(dfcounting = dfcount_gbsg, rho = 0, gamma = 0, scheme = "fh")
+temp <- wlr_dhat_estimates(dfcounting = dfcount_gbsg, scheme_params = list(rho = 0, gamma = 0), scheme = "fh")
 with(temp,lr^2/sig2_lr)
 ```
 

@@ -16,11 +16,15 @@ library(gt)
 
 # Updated 
 source('../R/kmplotting_helpers.R')
-source('../R/km_calculations_helpers.R')
 source('../R/weightedCox_simulations_helpers.R')
+
 source('../R/weightedCox.R')
-source('../R/weightedCox_helpers.R')
-source('../R/df_counting_improved.R')
+source('../R/weighted_helpers.R')
+
+source('../R/df_counting.R')
+source('../R/df_counting_helpers.R')
+
+source('../R/km_wlr_calculations_helpers.R')
 
 ```
 
@@ -92,7 +96,11 @@ dat <- sim_pw_surv(n = 698, enroll_rate = enroll_rate,
 analysis_data <- cut_data_by_date(dat, 36)
 dfa <- analysis_data
 dfa$treat <- ifelse(dfa$treatment=="experimental",1,0)
-dfcount <- get_dfcounting(df=dfa, tte.name = "tte", event.name = "event", treat.name = "treat", arms = "treatment", by.risk= 3, rho=0, gamma=1)
+
+dfcount <- get_dfcounting(df=dfa, tte.name = "tte", event.name = "event", treat.name = "treat", arms = "treatment", by.risk= 3, 
+                          scheme = "fh", scheme_params = list(rho = 0, gamma = 1))
+
+
 
 ```
 
@@ -122,7 +130,7 @@ title(main="Simulated data")
 
 
 
-```{r, fig.width = 8, fig.height=6}
+```{r, fig.width = 8, fig.height=6, eval = FALSE}
 g <- plot_weight_schemes(dfcount)
 print(g)
 ```
@@ -140,33 +148,35 @@ par(mfrow=c(2,2))
 ymin <- -3.5
 ymax <- 3.5
 
-temp <- wlr_cumulative(dfcounting = dfcount, scheme_params = list(rho = 0, gamma = 1), scheme = "fh")
+temp <- wlr_cumulative(dfwlr = dfcount, scheme_params = list(rho = 0, gamma = 1), scheme = "fh", return_cumulative = TRUE)
 
-with(temp, plot(time, z_cumulative, xlab="time", ylab="cumulative log-rank Z", type="s", ylim=c(ymin,ymax))
+with(temp, plot(time, z.score, xlab="time", ylab="cumulative log-rank Z", type="s", ylim=c(ymin,ymax))
 )
-z01 <- temp$z_cumulative
-
+z01 <- temp$z.score
 rm("temp")
 abline(h = qnorm(0.975), lwd=2, col="red")
+
+
+
 title(main="FH(0,1)")
-temp <- wlr_cumulative(dfcounting = dfcount, scheme_params = list(rho = 0, gamma = 0), scheme = "fh")
-with(temp, plot(time, z_cumulative, xlab="time", ylab="cumulative log-rank Z", type="s", ylim=c(ymin,ymax))
+temp <- wlr_cumulative(dfwlr = dfcount, scheme_params = list(rho = 0, gamma = 0), scheme = "fh", return_cumulative = TRUE)
+with(temp, plot(time, z.score, xlab="time", ylab="cumulative log-rank Z", type="s", ylim=c(ymin,ymax))
      )
 rm("temp")
 abline(h = qnorm(0.975), lwd=2, col="red")
 title(main="FH(0,0)")
-temp <- wlr_cumulative(dfcounting = dfcount, scheme = "fh_exp2")
-with(temp, plot(time, z_cumulative, xlab="time", ylab="cumulative log-rank Z", type="s", ylim=c(ymin,ymax)))
+temp <- wlr_cumulative(dfwlr = dfcount, scheme = "fh_exp2", return_cumulative = TRUE)
+with(temp, plot(time, z.score, xlab="time", ylab="cumulative log-rank Z", type="s", ylim=c(ymin,ymax)))
 abline(h = qnorm(0.975), lwd=2, col="red")
 
-z1 <- temp$z_cumulative
+z1 <- temp$z.score
 
 title(main="FH_exp2")
 rm("temp")
-temp <- wlr_cumulative(dfcounting = dfcount, scheme_params = list(mb_tstar = 12), scheme = "MB")
-with(temp, plot(time, z_cumulative, xlab="time", ylab="cumulative log-rank Z", type="s", ylim=c(ymin,ymax))
+temp <- wlr_cumulative(dfwlr = dfcount, scheme_params = list(mb_tstar = 12), scheme = "MB", return_cumulative = TRUE)
+with(temp, plot(time, z.score, xlab="time", ylab="cumulative log-rank Z", type="s", ylim=c(ymin,ymax))
      )
-z2 <- temp$z_cumulative
+z2 <- temp$z.score
 abline(h = qnorm(0.975), lwd=2, col="red")
 title(main="MB(12)")
 
@@ -182,6 +192,8 @@ plot(temp$time, z01-z1, xlab="time", ylab="FH(0,1) - FH_exp2", type="s")
 ```{r}
 
 get_rg <- cox_rhogamma(dfcount = dfcount, scheme = "fh", scheme_params = list(rho = 0, gamma = 0), draws = 1000, verbose = FALSE)
+
+
 res <- data.table()
 res$analysis <- "FH(0,0)"
 res$z <- get_rg$z.score
@@ -195,7 +207,9 @@ res$upper <- get_rg$hr_ci_asy$upper
 
 
 res_update <- res
+
 get_rg <- cox_rhogamma(dfcount = dfcount, scheme = "fh", scheme_params = list(rho = 0, gamma = 1), draws = 1000, verbose = FALSE)
+
 res <- data.table()
 res$analysis <- "FH(0,1)"
 res$z <- get_rg$z.score

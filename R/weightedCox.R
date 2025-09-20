@@ -1,3 +1,49 @@
+# ---- Helper Functions ----
+ci_cox  <- function(bhat, sig_bhat, alpha = 0.05, verbose = FALSE) {
+  z <- qnorm(1 - alpha / 2)
+  bhat_lower <- bhat - z * sig_bhat
+  bhat_upper <- bhat + z * sig_bhat
+  hr <- exp(bhat)
+  lower <- exp(bhat_lower)
+  upper <- exp(bhat_upper)
+  if (verbose) {
+    cat(sprintf("Hazard Ratio (HR): %.3f\n", hr))
+    cat(sprintf("95%% CI: [%.3f, %.3f]\n", lower, upper))
+  }
+  result <- data.frame(
+    beta = bhat,
+    sig_bhat = sig_bhat,
+    hr = hr,
+    lower = lower,
+    upper = upper
+  )
+  return(result)
+}
+
+
+
+#' Count weighted events with delta up to time x
+#' @param x Time point
+#' @param error Event times
+#' @param delta Event indicator
+#' @param weight Weights
+#' @return Weighted event count
+#' @export
+N_rhogamma <- function(x, error, delta, weight = 1) {
+  sum(weight * delta * (error <= x))
+}
+
+#' Root-finding for Cox score function
+find_cox_root <- function(time, delta, z, w_hat, wt_rg) {
+  tryCatch(
+    uniroot(f = cox_score_rhogamma, interval = c(-15, 15), extendInt = "yes", tol = 1e-10,
+            time = time, delta = delta, z = z, w_hat = w_hat, wt_rg = wt_rg),
+    error = function(e) NA
+  )
+}
+
+
+
 
 # score calculation
 score_calculation <- function(ybar1, ybar0, dN1, dN0, wt_rg){
@@ -29,19 +75,19 @@ cox_score_rhogamma <- function(beta, time, delta, z, w_hat = rep(1,length(time))
   tt0 <- time[z == 0]
   dd0 <- delta[z == 0]
   w0_hat <- w_hat[z == 0]
-  risk_z0 <- colSums(outer(tt0, at_points, FUN = ">=") * w0_hat)
+  ybar0 <- colSums(outer(tt0, at_points, FUN = ">=") * w0_hat)
   event_mat0 <- outer(tt0[dd0 == 1], at_points, FUN = "<=") * w0_hat[dd0 == 1]
   counting0 <- colSums(event_mat0)
-  dN_z0 <- diff(c(0, counting0))
+  dN0 <- diff(c(0, counting0))
   tt1 <- time[z == 1]
   dd1 <- delta[z == 1]
   w1_hat <- w_hat[z == 1]
-  risk_z1 <- colSums(outer(tt1, at_points, FUN = ">=") * w1_hat * exp(beta))
+  ybar1 <- colSums(outer(tt1, at_points, FUN = ">=") * w1_hat * exp(beta))
   event_mat1 <- outer(tt1[dd1 == 1], at_points, FUN = "<=") * w1_hat[dd1 == 1]
   counting1 <- colSums(event_mat1)
-  dN_z1 <- diff(c(0, counting1))
+  dN1 <- diff(c(0, counting1))
 
-  score_stats <- score_calculation(ybar1 = risk_z1, ybar0 = risk_z0, dN0 = dN_z0, dN1 = dN_z1, wt_rg = wt_rg)
+  score_stats <- score_calculation(ybar1 = ybar1, ybar0 = ybar0, dN1 = dN1, dN0 = dN0, wt_rg = wt_rg)
 
   score <- score_stats$score
 
@@ -56,11 +102,6 @@ cox_score_rhogamma <- function(beta, time, delta, z, w_hat = rep(1,length(time))
   return(list(score = score, sig2_score = sig2U, sig2_beta_asy = sig2_beta_asy, K_wt_rg = K_wt_rg, i_bhat = i_bhat))
   }
 }
-
-
-
-
-
 
 #' Weighted Cox model with (rho, gamma) weights
 #' @param dfcount Data frame with columns: time, delta, z, w_hat, survP_all, survG_all
@@ -90,10 +131,10 @@ cox_rhogamma <- function(dfcount, scheme = "fh", scheme_params = list(rho = 0, g
     stop("scheme must be one of: ", paste(supported_schemes, collapse = ", "))
   }
 
-   if(scheme == "MB"){
-  if(is.null(scheme_params$mb_tstar)){
+if(scheme == "MB"){
+   if(is.null(scheme_params$mb_tstar)){
    cat("Missing mb_tstar argument in scheme_params you have:", paste(names(scheme_params), collapse = ", "), "\n")
-     }
+    }
    scheme_params <- list(mb_tstar = scheme_params$mb_tstar, tpoints = time)
    }
 

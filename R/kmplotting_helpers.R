@@ -20,7 +20,7 @@ plot_km_confint_polygon <- function(x, surv, se, conf_level, col) {
 
 #' Plot KM curves for two groups with optional confidence intervals and censoring marks
 #'
-#' @param at.points Time points for plotting
+#' @param at_points Time points for plotting
 #' @param S0.KM Survival probabilities for group 0
 #' @param idx0 Indices for censoring in group 0
 #' @param idv0 Indices for events in group 0
@@ -48,7 +48,7 @@ plot_km_confint_polygon <- function(x, surv, se, conf_level, col) {
 #' @param ... Additional arguments to plot
 #' @export
 plot_km_curves_counting <- function(
-    at.points, S0.KM, idx0, idv0, S1.KM, idx1, idv1, col.0, col.1, ltys, lwds,
+    at_points, S0.KM, idx0, idv0, S1.KM, idx1, idv1, col.0, col.1, ltys, lwds,
     Xlab, Ylab, ylim, xlim, show.ticks = FALSE, cens0 = NULL, risk.points, risk.points.label,
     cens1 = NULL, se0.KM = NULL, se1.KM = NULL, conf.int = FALSE, conf_level = 0.95,
     censor.cex = 1.0, time.zero = 0, tpoints.add = c(0), ...
@@ -59,7 +59,7 @@ plot_km_curves_counting <- function(
   if (missing(col.0) || missing(col.1)) stop("col.0 and col.1 must be specified")
 
   plot(
-    at.points[idv1], S1.KM[idv1], type = "n", ylim = ylim, xlim = xlim,
+    at_points[idv1], S1.KM[idv1], type = "n", ylim = ylim, xlim = xlim,
     lty = ltys[1], col = col.1, lwd = lwds[1], xlab = Xlab, ylab = Ylab, yaxt = "n",
     xaxt = "n", ...
   )
@@ -67,12 +67,12 @@ plot_km_curves_counting <- function(
   axis(1, at = risk.points, labels = risk.points.label)
 
   if (conf.int && !is.null(se0.KM) && !is.null(se1.KM)) {
-    plot_km_confint_polygon(at.points[idv0], S0.KM[idv0], se0.KM[idv0], conf_level, "lightgrey")
-    plot_km_confint_polygon(at.points[idv1], S1.KM[idv1], se1.KM[idv1], conf_level, "lightblue")
+    plot_km_confint_polygon(at_points[idv0], S0.KM[idv0], se0.KM[idv0], conf_level, "lightgrey")
+    plot_km_confint_polygon(at_points[idv1], S1.KM[idv1], se1.KM[idv1], conf_level, "lightblue")
   }
 
-  lines(at.points[idv1], S1.KM[idv1], type = "s", lty = ltys[1], col = col.1, lwd = lwds[1])
-  lines(at.points[idv0], S0.KM[idv0], type = "s", lty = ltys[2], col = col.0, lwd = lwds[2])
+  lines(at_points[idv1], S1.KM[idv1], type = "s", lty = ltys[1], col = col.1, lwd = lwds[1])
+  lines(at_points[idv0], S0.KM[idv0], type = "s", lty = ltys[2], col = col.0, lwd = lwds[2])
 
   if (show.ticks && !is.null(cens0)) {
     points(cens0, S0.KM[idx0], pch = 3, col = col.0, cex = censor.cex)
@@ -219,7 +219,7 @@ add_legends <- function(dfcount, show.cox, cox.cex, put.legend.cox, show.logrank
 #' @details
 #' The \code{dfcount} list must contain the following elements:
 #' \itemize{
-#'   \item at.points: Time points for evaluation.
+#'   \item at_points: Time points for evaluation.
 #'   \item risk.points: Time points for risk table.
 #'   \item risk.points.label: Labels for risk table time points.
 #'   \item idv0, idv1: Individual IDs for control and treatment.
@@ -260,12 +260,12 @@ KM_plot_2sample_weighted_counting <- function(
 ) {
   # Validate input
   stopifnot(is.list(dfcount))
-  required_fields <- c("at.points", "risk.points", "risk.points.label", "idv0", "surv0", "sig2_surv0", "idx0", "cens0", "riskpoints0",
+  required_fields <- c("at_points", "risk.points", "risk.points.label", "idv0", "surv0", "sig2_surv0", "idx0", "cens0", "riskpoints0",
                        "idv1", "surv1", "sig2_surv1", "idx1", "cens1", "riskpoints1")
   missing_fields <- setdiff(required_fields, names(dfcount))
   if (length(missing_fields) > 0) stop("Missing fields in dfcount: ", paste(missing_fields, collapse = ", "))
 
-  at.points <- dfcount$at.points
+  at_points <- dfcount$at_points
   risk.points <- dfcount$risk.points
   risk.points.label <- dfcount$risk.points.label
 
@@ -290,10 +290,10 @@ KM_plot_2sample_weighted_counting <- function(
   }
 
   plot_km_curves_counting(
-    at.points, S0.KM, idx0, idv0, S1.KM, idx1, idv1, col.0, col.1, ltys, lwds, Xlab, Ylab,
+    at_points, S0.KM, idx0, idv0, S1.KM, idx1, idv1, col.0, col.1, ltys, lwds, Xlab, Ylab,
     ylim = c(ifelse(is.null(ymin2), ymin - risk_offset, ymin2), ymax),
     risk.points = risk.points, risk.points.label = risk.points.label,
-    xlim = c(xmin, ifelse(is.null(xmax), max(c(at.points)), xmax)),
+    xlim = c(xmin, ifelse(is.null(xmax), max(c(at_points)), xmax)),
     show.ticks = show.ticks, cens0 = cens0, cens1 = cens1,
     censor.cex = censor.cex, conf.int = conf.int, conf_level = conf_level, se1.KM = se1.KM, se0.KM = se0.KM
   )
@@ -417,14 +417,14 @@ plotKM.band_subgroups <- function(
 
   # Truncate the observed timepoints at max_tau
   atpoints <- Y[Y <= max_tau]
-  at.points <- sort(unique(c(atpoints, max_tau, tau_add, riskpoints)))
+  at_points <- sort(unique(c(atpoints, max_tau, tau_add, riskpoints)))
 
   fit <- KM_diff(
     df = df, tte.name = tte.name, event.name = event.name, weight.name = weight.name,
-    treat.name = treat.name, at.points = at.points, alpha = 0.05, risk.points = riskpoints,
+    treat.name = treat.name, at_points = at_points, alpha = 0.05, risk.points = riskpoints,
     draws = draws, seedstart = seedstart, draws.band = draws.band, qtau = qtau, show_resamples = show_resamples
   )
-  at.points <- fit$at.points
+  at_points <- fit$at_points
   dhat <- fit$dhat
   # pointwise CIs
   l0_pw <- fit$lower
@@ -433,11 +433,11 @@ plotKM.band_subgroups <- function(
   l0_sb <- fit$sb_lower
   u0_sb <- fit$sb_upper
 
-  risk.points <- round(seq(time.zero.label, max(at.points), by = by.risk))
+  risk.points <- round(seq(time.zero.label, max(at_points), by = by.risk))
   risk.points <- sort(unique(c(risk.points, risk.add)))
   risk.points <- c(time.zero.label - time.zero.pad, risk.points)
 
-  risk.points <- risk.points[which(risk.points <= max(fit$at.points))]
+  risk.points <- risk.points[which(risk.points <= max(fit$at_points))]
 
   # Total risk for ITT
   risk0 <- colSums(outer(Y, risk.points, FUN = ">="))
@@ -451,10 +451,10 @@ plotKM.band_subgroups <- function(
   if(length(sg_labels)>0){
   sg_flags <- lapply(sg_labels, function(expr) with(df, eval(parse(text = expr))))
   # Preallocate matrices
-  Dsg_mat <- matrix(NA, nrow = length(at.points), ncol = length(sg_labels))
+  Dsg_mat <- matrix(NA, nrow = length(at_points), ncol = length(sg_labels))
   Rsg_mat <- matrix(NA, nrow = length(risk0), ncol = length(sg_labels))
-  S0_mat <- matrix(NA, nrow = length(at.points), ncol = length(sg_labels))
-  S1_mat <- matrix(NA, nrow = length(at.points), ncol = length(sg_labels))
+  S0_mat <- matrix(NA, nrow = length(at_points), ncol = length(sg_labels))
+  S1_mat <- matrix(NA, nrow = length(at_points), ncol = length(sg_labels))
 
   # Here we only want point estimates (SE's not considered for subgroup plot)
   for (i in seq_along(sg_flags)) {
@@ -464,7 +464,7 @@ plotKM.band_subgroups <- function(
     Treat_sg <- df_sg[[treat.name]]
     res <- KM_diff(
       df = df_sg, tte.name = tte.name, event.name = event.name, weight.name = weight.name,
-      treat.name = treat.name, at.points = at.points, alpha = 0.05, risk.points = risk.points,
+      treat.name = treat.name, at_points = at_points, alpha = 0.05, risk.points = risk.points,
       draws = 0, draws.band = 0
     )
 
@@ -476,7 +476,7 @@ plotKM.band_subgroups <- function(
   }
   }
 
-  x <- at.points
+  x <- at_points
   mean.value <- dhat
   lower <- l0_pw
   upper <- u0_pw
@@ -561,7 +561,7 @@ plotKM.band_subgroups <- function(
   }
     }
   invisible(list( fit_itt = fit,
-    xpoints = at.points, Dhat_subgroups = Dsg_mat, s0_subgroups = S0_mat, s1_subgroups = S1_mat,
+    xpoints = at_points, Dhat_subgroups = Dsg_mat, s0_subgroups = S0_mat, s1_subgroups = S1_mat,
     rpoints = risk.points, Risk_subgroups = Rsg_mat, mean = mean.value, lower = lower, upper = upper
   ))
 }
