@@ -293,6 +293,7 @@ wlr_dhat_estimates <- function(dfcounting, tzero = 24,
     scheme_params <- list(mb_tstar = scheme_params$mb_tstar, tpoints = at_points)
   }
 
+
   validate_scheme_params(scheme, scheme_params, S.pool, tpoints = at_points)
 
   # Calculate weights
@@ -495,8 +496,6 @@ KM_diff <- function(df, tte.name, event.name, treat.name, weight.name=NULL, at_p
 
   dhat <- surv1 - surv0
   sig2_dhat <- sig2_surv0 + sig2_surv1
-
-  #print(summary(sig2_dhat))
 
   surv0_star <- surv1_star <- dhat_star <- NULL
   c_alpha_band <- sb_lower <- sb_upper <- NULL

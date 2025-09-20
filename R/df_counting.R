@@ -46,6 +46,7 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
 
   validate_input(df, c(tte.name, event.name, treat.name, weight.name))
 
+
   # Validate scheme and parameters
   supported_schemes <- c("fh", "schemper", "XO", "MB", "custom_time", "fh_exp1", "fh_exp2")
   if (!(scheme %in% supported_schemes)) {
