@@ -434,6 +434,10 @@ plotKM.band_subgroups <- function(
     modify_tau = modify_tau,
     draws = draws, seedstart = seedstart, draws.band = draws.band, qtau = qtau, show_resamples = show_resamples
   )
+
+  # Add max_tau to fit
+  fit$max_tau <- max_tau
+
   at_points <- fit$at_points
   dhat <- fit$dhat
   # pointwise CIs

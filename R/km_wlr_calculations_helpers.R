@@ -513,13 +513,16 @@ KM_diff <- function(df, tte.name, event.name, treat.name, weight.name=NULL, at_p
     G1.draws <- matrix(rnorm(draws.band * n1), ncol = draws.band)
     surv1_star <- resampling_survival(group_data1$U, group_data1$W, group_data1$D, at_points, draws.band, surv1, G1.draws)
 
-    dhat_star <- (surv1_star - surv0_star) / sqrt(sig2_dhat)
+    dhat_star <- (surv1_star - surv0_star)
+
+    Zdhat_star <- dhat_star / sqrt(sig2_dhat)
+
     # simultaneous band
-    sups <- apply(abs(dhat_star), 2, max, na.rm = TRUE)
+    sups <- apply(abs(Zdhat_star), 2, max, na.rm = TRUE)
     c_alpha_band <- quantile(sups,c(0.95))
     # Show first 20
     if(show_resamples){
-      matplot(at_points, dhat_star[,c(1:20)], type="s", lty=2, lwd = 1, xlab="time", ylab = "Centered survival differences (1st 20)",
+      matplot(at_points, Zdhat_star[,c(1:20)], type="s", lty=2, lwd = 1, xlab="time", ylab = "Normalized survival differences (1st 20)",
               main = sprintf("c_alpha (simul. band): %.2f", c_alpha_band)
       )
     }
@@ -535,7 +538,9 @@ KM_diff <- function(df, tte.name, event.name, treat.name, weight.name=NULL, at_p
     at_points = at_points, surv0 = surv0, sig2_surv0 = sig2_surv0,
     surv1 = surv1, sig2_surv1 = sig2_surv1, dhat = dhat, sig2_dhat = sig2_dhat,
     lower = lower, upper = upper,
-    dhat_star = dhat_star, surv0_star = surv0_star, surv1_star = surv1_star,
+    dhat_star = dhat_star,
+    Zdhat_star = Zdhat_star,
+    surv0_star = surv0_star, surv1_star = surv1_star,
     c_alpha_band = c_alpha_band, sb_lower = sb_lower, sb_upper = sb_upper
   )
 }
@@ -604,3 +609,7 @@ wlr_cumulative <- function(dfwlr, scheme_params = list(rho = 0, gamma = 0.5), sc
   z <- lr / sqrt(sig2_lr)
   list(z.score = z, time = at_points, score = lr, sig2.score = sig2_lr)
 }
+
+
+
+
