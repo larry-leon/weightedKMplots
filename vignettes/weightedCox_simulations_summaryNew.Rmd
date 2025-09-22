@@ -16,9 +16,9 @@ library(gt)
 # Updated 
 source('../R/kmplotting_helpers.R')
 source('../R/km_wlr_calculations_helpers.R')
-source('../R/weightedCox_simulations_helpers.R')
+source('../R/weightedCox_simulations_helpers_revised.R')
 source('../R/weightedCox.R')
-source('../R/weighted_helpers.R')
+source('../R/weighted_helpers_revised.R')
 source('../R/df_counting.R')
 source('../R/df_counting_helpers.R')
 
@@ -37,9 +37,9 @@ source("R/weightedCox_simulations_helpers.R")
 # Load simulation results
 ```{r, include=TRUE}
 
-load("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/vignettes/results/wCoxsims1_linux_25k.RData")
+#load("~/Library/CloudStorage/OneDrive-MerckSharp&DohmeLLC/documents/GitHub/weightedKMplots/vignettes/results/wCoxsims1_linux_50k.RData")
 
-#load("/media/larryleon/My Projects/GitHub/weightedKMplots/vignettes/results/wCoxsims1_linux_5k.RData")
+#load("/media/larryleon/My Projects/GitHub/weightedKMplots/vignettes/results/wCoxsims1_linux_50k.RData")
 
 ```
 
@@ -276,7 +276,7 @@ long_df2 <- tidyr::pivot_longer(df2, cols = -Scenario, names_to = 'z_stat', valu
 
 # Custom order: group main and _mine variants together
 z_main <- c('logrankz', 'fh00z_mine', 'fh05z', 'fh05z_mine','fh01z', 'fh01z_mine',
-            'mb6z', 'mb6z_mine', 'mb12z', 'mb12z_mine', 'fhe1z', 'fhe2z')
+            'mb6z', 'mb6z_mine', 'mb12z', 'mb12z_mine', 'fhe1z', 'fhe2z', 't601z')
 
 # Only keep those present in z_cols_nondebiased
 z_order2 <- z_main[z_main %in% z_cols_nondebiased]
@@ -313,8 +313,8 @@ ann_df_ws$label <- sub("^0+", "", sub("\\.?0+$", "", sprintf("%.3f", ann_df_ws$p
 n_sim <- res_out$number_sims
 pnull_threshold <- round(0.025 + 1.96*sqrt(0.025*0.975/n_sim),4)
 
-# Set label color based on prop_signif > 0.0269
-ann_df_ws$label_color <- ifelse(ann_df_ws$prop_signif > 0.0269, "red", "black")
+# Set label color based on prop_signif > 0.0264
+ann_df_ws$label_color <- ifelse(ann_df_ws$prop_signif > 0.0264, "red", "black")
 
 # Merge prop_signif into long_df2 for correct fill
 long_df2_fill <- left_join(long_df2, ann_df, by = c('scenario_name', 'z_stat'))
@@ -358,7 +358,13 @@ df <- res_out$results_sims[, c('Scenario', z_cols)]
 # Remove columns with 'debiased' from z_cols
 z_cols_nondebiased <- z_cols[!grepl('debiased', z_cols)]
 # Select Scenario and filtered z columns
-df2 <- res_out$results_sims[, c('Scenario', z_cols_nondebiased)]
+
+z_main <- c('fh00z_mine', 'fh05z_mine', 'fh01z_mine',
+            'mb6z_mine', 'mb12z_mine', 'fhe1z', 'fhe2z', 't601z')
+
+
+df2 <- res_out$results_sims[, c('Scenario', z_main)]
+
 # Reshape to long format
 long_df2 <- tidyr::pivot_longer(df2, cols = -Scenario, names_to = 'z_stat', values_to = 'z_value')
 
@@ -371,16 +377,16 @@ long_df2 <- tidyr::pivot_longer(df2, cols = -Scenario, names_to = 'z_stat', valu
 #long_df2$z_stat <- factor(long_df2$z_stat, levels = z_order)
 
 # Custom order: group main and _mine variants together
-z_main <- c('fh00z_mine', 'fh05z_mine', 'fh01z_mine',
-            'mb6z_mine', 'mb12z_mine', 'fhe1z', 'fhe2z')
+# z_main <- c('fh00z_mine', 'fh05z_mine', 'fh01z_mine',
+#             'mb6z_mine', 'mb12z_mine', 'fhe1z', 'fhe2z', 't601z')
 
 # Only keep those present in z_cols_nondebiased
-z_order2 <- z_main[z_main %in% z_cols_nondebiased]
+#z_order2 <- z_main[z_main %in% z_cols_nondebiased]
 # Add any remaining columns not in z_main
 #z_order2 <- c(z_order2, setdiff(z_cols_nondebiased, z_order2))
 # NOTE: here we only want to view stats in z_main above
 # Set factor levels for facet order
-long_df2$z_stat <- factor(long_df2$z_stat, levels = z_order2)
+#long_df2$z_stat <- factor(long_df2$z_stat, levels = z_order2)
 
 # Create scenario_name mapping
 scenario_labels <- c('PH', '3-month', '6-month', 'Crossing', 'Weak', 'Strong')
@@ -410,8 +416,8 @@ ann_df_ws$label <- sub("^0+", "", sub("\\.?0+$", "", sprintf("%.3f", ann_df_ws$p
 n_sim <- res_out$number_sims
 pnull_threshold <- round(0.025 + 1.96*sqrt(0.025*0.975/n_sim),4)
 
-# Set label color based on prop_signif > 0.0269
-ann_df_ws$label_color <- ifelse(ann_df_ws$prop_signif > 0.0269, "red", "black")
+# Set label color based on prop_signif > 0.0264
+ann_df_ws$label_color <- ifelse(ann_df_ws$prop_signif > 0.0264, "red", "black")
 
 # Merge prop_signif into long_df2 for correct fill
 long_df2_fill <- left_join(long_df2, ann_df, by = c('scenario_name', 'z_stat'))
@@ -496,9 +502,10 @@ results |> group_by(Scenario) |>
             "MB(12)w" = mean(mb12_wald < 1.0),
             "MB(12)z" = mean(mb12z_mine > qnorm(0.975)),
             "FHe2w" = mean(fhe2_wald < 1.0),
-            "FHe2z" = mean(fhe2z > qnorm(0.975))
+            "FHe2z" = mean(fhe2z > qnorm(0.975)),
+            "t601z" = mean(t601z > qnorm(0.975))
             ) |>
-  gt() |> fmt_number(columns = 2:11, decimals = 3)  
+  gt() |> fmt_number(columns = 2:12, decimals = 3)  
 
 ```
 
@@ -561,6 +568,7 @@ results |> group_by(Scenario) |>
   gt() |> fmt_number(columns = 2:16, decimals = 3)  
 
 ```
+
 
 
 

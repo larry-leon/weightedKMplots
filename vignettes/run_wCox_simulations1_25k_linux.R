@@ -3,13 +3,22 @@ library(survival)
 library(weightedKMplots)
 
 # load these prior
-source("R/kmplotting_helpers.R")
-source("R/df_counting.R")
-source("R/df_counting_helpers.R")
-source("R/km_wlr_calculations_helpers.R")
-source("R/weightedCox.R")
-source("R/weighted_helpers.R")
-source("R/weightedCox_simulations_helpers.R")
+# source("R/kmplotting_helpers.R")
+# source("R/df_counting.R")
+# source("R/df_counting_helpers.R")
+# source("R/km_wlr_calculations_helpers.R")
+# source("R/weightedCox.R")
+# source("R/weighted_helpers.R")
+# source("R/weightedCox_simulations_helpers.R")
+
+# Updated
+source('R/kmplotting_helpers.R')
+source('R/weightedCox_simulations_helpers_revised.R')
+source('R/weightedCox.R')
+source('R/weighted_helpers_revised.R')
+source('R/df_counting.R')
+source('R/df_counting_helpers.R')
+source('R/km_wlr_calculations_helpers.R')
 
 
 library(gsDesign2)
@@ -107,7 +116,7 @@ ans$dropout_rate <- dropout_rate
 return(ans)
 }
 
-n_now <- 25000
+n_now <- 25 * 1000
 
 these_sims <- get_sims(n_sim = n_now, seedstart = 8316951, num_workers = 100, mart_draws = 500, save_results = TRUE,
                        file_togo = "vignettes/results/wCoxsims1_linux_25k.RData")

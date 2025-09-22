@@ -163,8 +163,9 @@ fail_rate <- data.frame(stratum = rep("All", 2 * nrow(fr)),
   res$fh05_coverstar <- with(temp, is_covered(hr_true, hr_ci_star))
   rm("temp")
 
+
   # t6(0,1)
-  temp <- cox_rhogamma(dfcount = dfcount, scheme = "custom_time", scheme_params = list(t.tau = 6, w0.tau = 0, w1.tau =1), draws = mart_draws)
+  temp <- cox_rhogamma(dfcount = dfcount, scheme = "custom_time", scheme_params = list(t.tau = 6, w0.tau = 0, w1.tau = 1), draws = mart_draws)
   res$t601z <- temp$z.score
   res$t601z_debiased <- temp$z.score_debiased
   res$t601_bhat <- with(temp$fit,bhat)
