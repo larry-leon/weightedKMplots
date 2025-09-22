@@ -429,7 +429,7 @@ resampling_survival <- function(U, W, D, at.points, draws.band, surv, G_draws) {
 #'
 #' @export
 KM_diff <- function(df, tte.name, event.name, treat.name, weight.name=NULL, at_points = sort(df[[tte.name]]), alpha = 0.05, seedstart = 8316951, draws = 0,
-                    risk.points, draws.band = 0, tau.seq = 0.25, qtau = 0.025, show_resamples = TRUE) {
+                    risk.points, draws.band = 0, tau.seq = 0.25, qtau = 0.025, show_resamples = TRUE, modify_tau = FALSE) {
 
   required_cols <- c(tte.name, event.name, treat.name)
   missing_cols <- setdiff(required_cols, names(df))
@@ -468,8 +468,8 @@ KM_diff <- function(df, tte.name, event.name, treat.name, weight.name=NULL, at_p
     wgt <- wgt[ord]
   }
 
-  # For simultaneous bands restrict time range
-  if(draws.band > 0){
+  # For simultaneous bands restrict time range if modify_tau (otherwise align with RMST 'max(tau)')
+  if(draws.band > 0 && modify_tau){
     taus <- quantile(time[delta ==1], c(qtau, 1-qtau))
     at_points<-seq(taus[1],taus[2], by =tau.seq)
     riskp <- risk.points[which(risk.points <= taus[2])]

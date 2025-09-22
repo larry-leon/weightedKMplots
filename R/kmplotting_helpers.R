@@ -381,7 +381,7 @@ plotKM.band_subgroups <- function(
     y.risk1 = NULL, y.risk2 = NULL, ymin2 = NULL, risk_offset = NULL, risk.pad = 0.01,
     risk_delta = 0.0275, tau_add = NULL, time.zero.pad = 0, time.zero.label = 0.0,
     xlabel = NULL, ylabel = NULL, Maxtau = NULL, seedstart = 8316951,
-    ylim = NULL, draws.band = 20, qtau = 0.025, show_resamples = FALSE
+    ylim = NULL, draws.band = 20, qtau = 0.025, show_resamples = FALSE, modify_tau = FALSE
 ) {
   # Input checks
 
@@ -410,8 +410,17 @@ plotKM.band_subgroups <- function(
   maxe_1 <- max(Y[E == 1 & Treat == 1])
   max_tau <- min(c(maxe_0, maxe_1))
   if (!is.null(Maxtau)) max_tau <- Maxtau
-  if (!is.null(tau_add)) max_tau <- max(c(max_tau, tau_add))
+  if (!is.null(tau_add)){
+  if(tau_add > max_tau){ warning("May not want to estimate differences beyond max_tau (recommend tau_add = NULL or below max_tau)")
+  }
+    max_tau <- max(c(max_tau, tau_add))
+  }
 
+# For risk-set display want to include max_tau_risk
+  if(max_tau < 1){
+    max_tau_risk <- ceiling(max_tau)}
+  else { max_tau_risk <- floor(max_tau)
+  }
   # Add by.risk points
   riskpoints <- seq(0, max_tau, by = by.risk)
 
@@ -422,6 +431,7 @@ plotKM.band_subgroups <- function(
   fit <- KM_diff(
     df = df, tte.name = tte.name, event.name = event.name, weight.name = weight.name,
     treat.name = treat.name, at_points = at_points, alpha = 0.05, risk.points = riskpoints,
+    modify_tau = modify_tau,
     draws = draws, seedstart = seedstart, draws.band = draws.band, qtau = qtau, show_resamples = show_resamples
   )
   at_points <- fit$at_points
@@ -438,6 +448,8 @@ plotKM.band_subgroups <- function(
   risk.points <- c(time.zero.label - time.zero.pad, risk.points)
 
   risk.points <- risk.points[which(risk.points <= max(fit$at_points))]
+  # include max_tau_risk in risk-set display
+  risk.points <- unique(c(risk.points, max_tau_risk))
 
   # Total risk for ITT
   risk0 <- colSums(outer(Y, risk.points, FUN = ">="))
@@ -448,7 +460,7 @@ plotKM.band_subgroups <- function(
   S0_mat <- NULL
   S1_mat <- NULL
 
-  if(length(sg_labels)>0){
+  if(length(sg_labels) > 0){
   sg_flags <- lapply(sg_labels, function(expr) with(df, eval(parse(text = expr))))
   # Preallocate matrices
   Dsg_mat <- matrix(NA, nrow = length(at_points), ncol = length(sg_labels))
@@ -549,6 +561,7 @@ plotKM.band_subgroups <- function(
 
   axis(2, at = ypoints, cex.axis = cex_Yaxis, las = 1)
   risk.points.label <- as.character(c(time.zero.label, risk.points[-1]))
+
   axis(1, at = risk.points, labels = risk.points.label, cex.axis = cex_Yaxis)
   box()
 

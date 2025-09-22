@@ -33,7 +33,7 @@ ifelse(hr_ci$lower <= target & hr_ci$upper >= target, 1, 0)
 }
 
 
-sim_fn_analysis <- function(scen, enroll_rate, dropout_rate, fr, delay = 12, sim_num, mart_draws = 300, hr_true, seedstart = 8316951){
+sim_fn_analysis <- function(scen, enroll_rate, dropout_rate, fr, delay = 12, n_sample = 698, sim_num, mart_draws = 300, hr_true, seedstart = 8316951){
 if(is.na(hr_true) | length(hr_true) !=1) stop("Target hazard-ratio hr_true is missing or of length > 1")
 res <- data.table()
 res$Scenario <- c(scen)
@@ -48,7 +48,7 @@ fail_rate <- data.frame(stratum = rep("All", 2 * nrow(fr)),
   # Generate a dataset
   set.seed(seedstart + 1000*sim_num)
 
-  dat <- sim_pw_surv(n = 698, enroll_rate = enroll_rate,
+  dat <- sim_pw_surv(n = n_sample, enroll_rate = enroll_rate,
                      fail_rate = fail_rate, dropout_rate = dropout_rate)
 
   analysis_data <- cut_data_by_date(dat, 36)
@@ -182,7 +182,7 @@ fail_rate <- data.frame(stratum = rep("All", 2 * nrow(fr)),
   return(as.data.frame(res))
 }
 
-get_sims <- function(n_sim, dof_approach = "callr", num_workers = 4,  seedstart = 8316951, file_togo = c("results/sims_example_new.RData"), save_results = FALSE, verbose = TRUE, mart_draws = 100){
+get_sims <- function(n_sim, dof_approach = "callr", num_workers = 4,  n_sample = 698, seedstart = 8316951, file_togo = c("results/sims_example_new.RData"), save_results = FALSE, verbose = TRUE, mart_draws = 100){
 
   required_pkgs <- c("dplyr", "tibble", "foreach", "future", "tictoc", "simtrial", "doFuture")
   if(dof_approach == "callr") required_pkgs <- c(required_pkgs, "future.callr")
@@ -214,7 +214,7 @@ get_sims <- function(n_sim, dof_approach = "callr", num_workers = 4,  seedstart 
   results_sims <- foreach(scen = 1:6, .combine = 'rbind')%:%
     foreach(sim = 1:n_sim, .combine = 'rbind', .options.future = list(seed = TRUE)) %dofuture% {
       library(simtrial)
-      tryCatch({sim_fn_analysis(scen = scen, enroll_rate = enroll_rate, dropout_rate = dropout_rate, mart_draws = mart_draws, hr_true = hr_PH, sim_num = sim,
+      tryCatch({sim_fn_analysis(scen = scen, enroll_rate = enroll_rate, n_sample = n_sample, dropout_rate = dropout_rate, mart_draws = mart_draws, hr_true = hr_PH, sim_num = sim,
                                 fr = fr |> dplyr::filter(Scenario == scen))},
                error = function(e) NA)
     }
