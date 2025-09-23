@@ -244,6 +244,8 @@ gbsg_validate <- within(rotterdam, {
   time_months2 <- rfstime2 / 30.4375
   grade3 <- ifelse(grade == "3", 1, 0)
   treat <- hormon
+  event <- status2
+  tte <- time_months
   id <- as.numeric(1:nrow(rotterdam))
   SG0 <- ifelse(er <= 0, 0, 1)
 })
@@ -300,19 +302,32 @@ Note that the first graph displays 20 (1st 20) resampled approximations to the c
 $\Delta(t) = (\widehat{S_1} - \widehat{S_0})(t) - (S_{1} - S_{0})(t)),$ for timepoints $t$ within "qtau" quartiles of the event times (i.e., for qtau = 2.5\% we calculate $\Delta$ for time points within the 2.5\% and 97.5\% quantiles).
 
 ---- Simultaneous CI bands ----
-```{r, fig.width = 12, fig.height=6}
+```{r, fig.width = 10, fig.height=6}
+
 par(mfrow=c(1,2))
-  temp <- plotKM.band_subgroups(
-    df=df_gbsg,
+ 
+ temp <- plotKM.band_subgroups(
+    df=df_rotterdam,
     xlabel="Months", ylabel="Survival difference",
     yseq_length=5, cex_Yaxis=0.7, risk_cex=0.7,
-    tau_add=42, by.risk=6, risk_delta=0.075, risk.pad=0.03,
-    tte.name = "time_months", treat.name = "hormon", event.name = "status", draws.band = 5000, qtau = 0.025, show_resamples = TRUE
+    tau_add=42, by.risk = 12, risk_delta=0.075, risk.pad=0.03, ymax.pad = 0.125,
+    tte.name = tte.name, treat.name = treat.name, event.name = event.name, weight.name = weight.name,
+    draws.band = 1000, qtau = 0.025, show_resamples = FALSE
   )
   legend("topleft", c("Difference estimate", "95% pointwise CIs"),
-         lwd=c(2,1), col=c("black"), lty=c(1,2), bty="n", cex=0.75)
+         lwd=c(2,1), col=c("black"), lty=c(1,2), bty="n", cex=0.7)
   title(main="ITT population")
 
+get_bands <- cumulative_rmst_bands(df = df_rotterdam, fit = temp$fit_itt, 
+tte.name = tte.name, event.name = event.name, treat.name = treat.name , weight.name = weight.name, 
+draws_sb = 1000, xlab="months", rmst_max_cex = 0.7)
+
+  legend("topleft", c("Cumulative RMST estimate", "95% pointwise CIs"),
+         lwd=c(2,1), col=c("black"), lty=c(1,2), bty="n", cex=0.7)
+
+  
+  
+  
 ```
 
 

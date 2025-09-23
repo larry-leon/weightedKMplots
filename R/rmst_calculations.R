@@ -49,7 +49,7 @@ risk.points <- fit$risk.points
 
 ans$at_points <- at_points
 
-dt <- diff(tpoints)
+dt <- diff(at_points)
 mid_dhat <- (head(dhat, -1) + tail(dhat, -1)) / 2
 
 rmst_time <- c(0, cumsum(mid_dhat * dt))
