@@ -437,7 +437,7 @@ plotKM.band_subgroups <- function(
 
   # Add max_tau to fit
   fit$max_tau <- max_tau
-
+  fit$risk.points <- riskpoints
   at_points <- fit$at_points
   dhat <- fit$dhat
   # pointwise CIs

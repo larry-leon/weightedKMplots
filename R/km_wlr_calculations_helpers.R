@@ -428,7 +428,7 @@ resampling_survival <- function(U, W, D, at.points, draws.band, surv, G_draws) {
 #' @return A list containing survival estimates, variances, differences, confidence intervals, and (if requested) resampled curves and simultaneous bands.
 #'
 #' @export
-KM_diff <- function(df, tte.name, event.name, treat.name, weight.name=NULL, at_points = sort(df[[tte.name]]), alpha = 0.05, seedstart = 8316951, draws = 0,
+KM_diff <- function(df, tte.name = "tte", event.name = "event", treat.name = "treat", weight.name=NULL, at_points = sort(df[[tte.name]]), alpha = 0.05, seedstart = 8316951, draws = 0,
                     risk.points, draws.band = 0, tau.seq = 0.25, qtau = 0.025, show_resamples = TRUE, modify_tau = FALSE) {
 
   required_cols <- c(tte.name, event.name, treat.name)

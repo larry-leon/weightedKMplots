@@ -21,44 +21,6 @@ LS.int.del<-function(fx,x,dx,L=Inf){
 }
 
 
-#################################################
-# Check LS.int() integration with normal density
-# and the integrate(.) function
-#################################################
-#integrate(dnorm, 0, 200)
-#integrate(dnorm, 0, 2000)
-#check LS.int
-# test1<-integrate(dnorm, 0, 2)
-# x<-seq(0,2,by=0.001)
-# f1<-dnorm(x)
-# test1.check<-LS.int(f1,x)
-# print(c(test1$value,test1.check))
-
-#test1<-integrate(dnorm, 0, 200)
-#x<-seq(0,200,by=0.0001)
-#f1<-dnorm(x)
-#test1.check<-LS.int(f1,x)
-#print(c(test1$value,test1.check))
-
-#test1<-integrate(dnorm, 0, 2000)
-#x<-seq(0,2000,by=0.0001)
-#f1<-dnorm(x)
-#test1.check<-LS.int(f1,x)
-#print(c(test1$value,test1.check))
-
-#test1<-integrate(dnorm, 0, 2000)
-#x<-seq(0,3000,by=0.0001)
-#f1<-dnorm(x)
-#test1.check<-LS.int(f1,x,L=2000)
-#print(c(test1$value,test1.check))
-
-#test1<-integrate(dnorm, 0, 2)
-#x<-seq(0,30,by=0.0001)
-#f1<-dnorm(x)
-#test1.check<-LS.int(f1,x,L=2)
-#print(c(test1$value,test1.check))
-
-
 #temp<-NA.CHR.Weighted(time=time0,delta=(delta0==1))
 
 # S0.KM<-temp$S.KM
