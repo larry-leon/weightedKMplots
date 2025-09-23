@@ -146,38 +146,6 @@ GBSG - ITT Analysis
 dfcount_gbsg <- df_counting(df=df_gbsg, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, by.risk = 12, scheme = "fh", scheme_params = list(rho = 0, gamma =0), lr.digits = 4, cox.digits =3)
 ```
 
-```{r, fig.width = 10, fig.height=6}
-
-par(mfrow=c(1,2))
-
-dfa <- df_gbsg
-weight.name <- NULL
-
-draws_se <- 1000
-draws_sb <- 1000
-
-temp <- plotKM.band_subgroups(
-    df=dfa, 
-    Maxtau = NULL,
-    xlabel="Months", ylabel="Survival difference",
-    yseq_length=5, cex_Yaxis=0.7, risk_cex=0.7,
-    by.risk = 6, risk_delta=0.075, risk.pad=0.03,
-    tte.name = tte.name, treat.name = treat.name, event.name = event.name , weight.name = weight.name, 
-    draws.band = draws_se, qtau = 0.025, show_resamples = FALSE
-  )
-  legend("topleft", c("Difference estimate", "95% pointwise CIs"),
-         lwd=c(2,1), col=c("black"), lty=c(1,2), bty="n", cex=0.75)
-  title(main="GBSG data")
-
-  
-get_bands <- cumulative_rmst_bands(df = dfa, fit = temp$fit_itt, 
-tte.name = tte.name, event.name = event.name, treat.name = treat.name , weight.name = weight.name, 
-draws_sb = draws_sb, xlab="months", rmst_max_cex = 0.75)
-  legend("topleft", c("Cumulative RMST estimate", "95% pointwise CIs"),
-         lwd=c(2,1), col=c("black"), lty=c(1,2), bty="n", cex=0.75)
-
-  
-```  
   
 
 
@@ -185,7 +153,7 @@ draws_sb = draws_sb, xlab="months", rmst_max_cex = 0.75)
 
 Zero/one weighting (0 prior to 25 months, 1 thereafter using custom_time scheme)
 ```{r}
-
+# plot_weight_schemes will display default weights along with the specified scheme
 dfcount <- df_counting(df=df_gbsg, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, by.risk = 12, 
 scheme = "custom_time", scheme_params = list(t.tau = 25, w0.tau = 0, w1.tau = 1), lr.digits = 4, cox.digits =3)
 
@@ -302,7 +270,7 @@ Note that the first graph displays 20 (1st 20) resampled approximations to the c
 $\Delta(t) = (\widehat{S_1} - \widehat{S_0})(t) - (S_{1} - S_{0})(t)),$ for timepoints $t$ within "qtau" quartiles of the event times (i.e., for qtau = 2.5\% we calculate $\Delta$ for time points within the 2.5\% and 97.5\% quantiles).
 
 ---- Simultaneous CI bands ----
-```{r, fig.width = 10, fig.height=6}
+```{r, fig.width = 10, fig.height = 6}
 
 par(mfrow=c(1,2))
  
@@ -311,24 +279,70 @@ par(mfrow=c(1,2))
     xlabel="Months", ylabel="Survival difference",
     yseq_length=5, cex_Yaxis=0.7, risk_cex=0.7,
     tau_add=42, by.risk = 12, risk_delta=0.075, risk.pad=0.03, ymax.pad = 0.125,
-    tte.name = tte.name, treat.name = treat.name, event.name = event.name, weight.name = weight.name,
+    tte.name = tte.name, treat.name = treat.name, event.name = event.name, weight.name = "sw.weights",
+    draws.band = 1000, qtau = 0.025, show_resamples = TRUE
+  )
+  legend("topleft", c("Difference estimate", "95% pointwise CIs"),
+         lwd=c(2,1), col=c("black"), lty=c(1,2), bty="n", cex=0.7)
+  title(main="Rotterdam data
+        propensity score weighted")
+
+```
+
+
+## Compare Rotterdam observational data with propensity-score weighting and GBSG randomized data
+
+---- Simultaneous CI bands ----
+```{r, fig.width = 10, fig.height = 10}
+
+par(mfrow=c(2,2))
+ 
+ temp <- plotKM.band_subgroups(
+    df=df_rotterdam,
+    xlabel="Months", ylabel="Survival difference",
+    yseq_length=5, cex_Yaxis=0.7, risk_cex=0.7,
+    tau_add=42, by.risk = 12, risk_delta=0.075, risk.pad=0.03, ymax.pad = 0.125,
+    tte.name = tte.name, treat.name = treat.name, event.name = event.name, weight.name = "sw.weights",
     draws.band = 1000, qtau = 0.025, show_resamples = FALSE
   )
   legend("topleft", c("Difference estimate", "95% pointwise CIs"),
          lwd=c(2,1), col=c("black"), lty=c(1,2), bty="n", cex=0.7)
-  title(main="ITT population")
+  title(main="Rotterdam data
+        propensity score weighted")
 
 get_bands <- cumulative_rmst_bands(df = df_rotterdam, fit = temp$fit_itt, 
-tte.name = tte.name, event.name = event.name, treat.name = treat.name , weight.name = weight.name, 
+tte.name = tte.name, event.name = event.name, treat.name = treat.name , weight.name = "sw.weights", 
 draws_sb = 1000, xlab="months", rmst_max_cex = 0.7)
 
   legend("topleft", c("Cumulative RMST estimate", "95% pointwise CIs"),
          lwd=c(2,1), col=c("black"), lty=c(1,2), bty="n", cex=0.7)
 
   
+
+
+temp <- plotKM.band_subgroups(
+    df=df_gbsg, 
+    Maxtau = NULL,
+    xlabel="Months", ylabel="Survival difference",
+    yseq_length=5, cex_Yaxis=0.7, risk_cex=0.7,
+    by.risk = 6, risk_delta=0.075, risk.pad=0.03,
+    tte.name = tte.name, treat.name = treat.name, event.name = event.name, 
+    draws.band = 1000, qtau = 0.025, show_resamples = FALSE
+  )
+  legend("topleft", c("Difference estimate", "95% pointwise CIs"),
+         lwd=c(2,1), col=c("black"), lty=c(1,2), bty="n", cex=0.75)
+  title(main="GBSG data")
+
+  
+get_bands <- cumulative_rmst_bands(df = df_gbsg, fit = temp$fit_itt, 
+tte.name = tte.name, event.name = event.name, treat.name = treat.name, 
+draws_sb = 1000, xlab="months", rmst_max_cex = 0.75)
+  legend("topleft", c("Cumulative RMST estimate", "95% pointwise CIs"),
+         lwd=c(2,1), col=c("black"), lty=c(1,2), bty="n", cex=0.75)
   
   
 ```
+
 
 
 Subgroup differences along with ITT simultaneous band:
@@ -353,7 +367,7 @@ sg_cols <- c("blue", "brown", "green", "turquoise")
     xlabel="Months", ylabel="Survival difference",
     yseq_length=5, cex_Yaxis=0.7, risk_cex=0.7,
     tau_add=42, by.risk=6, risk_delta=0.05, risk.pad=0.03, draws.band = 5000,
-    tte.name = "time_months", treat.name = "hormon", event.name = "status" 
+    tte.name = tte.name, treat.name = treat.name, event.name = event.name 
   )
   legend("topleft", c("ITT", sg_labs),
          lwd=2, col=c("black", sg_cols), bty="n", cex=0.75)
@@ -370,8 +384,8 @@ par(mfrow=c(1,2))
     df = subset(df_gbsg, er > 0),
     xlabel="Months", ylabel="Survival difference",
     yseq_length=5, cex_Yaxis=0.7, risk_cex=0.7,
-    tau_add=42, by.risk=6, risk_delta=0.075, risk.pad=0.03,
-    tte.name = "time_months", treat.name = "hormon", event.name = "status", draws.band = 5000, qtau = 0.025, show_resamples = TRUE
+    by.risk=6, risk_delta=0.075, risk.pad=0.03,
+    tte.name = tte.name, treat.name = treat.name, event.name = event.name, draws.band = 5000, qtau = 0.025, show_resamples = TRUE
   )
   legend("topleft", c("Difference estimate", "95% pointwise CIs"),
          lwd=c(2,1), col=c("black"), lty=c(1,2), bty="n", cex=0.75)
@@ -380,26 +394,6 @@ par(mfrow=c(1,2))
   
 ```
 
-
-Rotterdam data example with propensity score weighting 
-
----- Simultaneous CI bands ----
-```{r, fig.width = 12, fig.height=6}
-par(mfrow=c(1,2))
-  temp <- plotKM.band_subgroups(
-    df=df_rotterdam,
-    xlabel="Months", ylabel="Survival difference",
-    yseq_length=5, cex_Yaxis=0.7, risk_cex=0.7,
-    tau_add=42, by.risk = 12, risk_delta=0.075, risk.pad=0.03,
-    tte.name = "time_months", treat.name = "hormon", event.name = "status", weight.name = "sw.weights", 
-    draws.band = 5000, qtau = 0.025, show_resamples = TRUE
-  )
-   legend("topleft", c("Difference estimate", "95% pointwise CIs"),
-   lwd=c(2,1), col=c("black"), lty=c(1,2), bty="n", cex=0.75)
-   title(main="ITT population weighted")
- 
-
-```
 
 # Some checks on results
 
@@ -520,513 +514,4 @@ par(mfrow=c(1,2))
 plot_weighted_km(dfcount_mod)
 plot_km(df=df_mod, tte.name=tte.name, event.name=event.name, treat.name=treat.name)
 ```
-
-
-# Appendix: Survival analysis helper and main analysis functions
-
-
-A set of functions for advanced Kaplan-Meier survival analysis, including estimation, event/risk matrix construction, resampling for confidence bands, and group comparison.
-
-## df_counting
-Prepares a comprehensive dataset for survival analysis using the counting process approach. Computes risk sets, event counts, Kaplan-Meier estimates, log-rank and Cox model results, and quantile estimates for two groups (e.g., treatment and control), optionally handling weights and stratification.
-
-```{r, echo = FALSE}
-library(DiagrammeR)
-# Define the flowchart in DOT syntax with horizontal layout
-flowchart <- grViz('digraph df_counting_flowchart {
-  node [shape = box, style = filled, fillcolor = "#e3e3e3"]
-  A [label = "Start: Call df_counting"]
-  B [label = "Input Validation & Preparation"]
-  C [label = "Fit Cox Model (if requested)"]
-  D [label = "Fit Log-Rank Test"]
-  E [label = "Fix Event Times (aeqSurv)"]
-  F [label = "Extract Time, Event, Group, Weights, Strata"]
-  G [label = "Sort Data by Time"]
-  H [label = "Determine Risk Table Points"]
-  I [label = "For Each Group: Compute Risk Sets & Event Counts"]
-  J [label = "Compute KM Estimates & Variances"]
-  K [label = "Get Censoring & Event Indices"]
-  L [label = "Compute Pooled KM Estimates"]
-  M [label = "Compute Log-Rank & Score Statistics"]
-  N [label = "Estimate Quantiles (e.g., median survival)"]
-  O [label = "Check Consistency of KM Curves & Quantiles"]
-  P [label = "If Stratified: Repeat for Each Stratum"]
-  Q [label = "Return Results List"]
-  R [label = "End"]
-
-  A -> B -> C -> D -> E -> F -> G -> H -> I -> J -> K -> L -> M -> N -> O -> P -> Q -> R
-}
-', width = 800, height =800)
-flowchart
-```
-
-**Key Features:**
-- Calculates risk set sizes and event counts at specified time points.
-- Computes weighted and unweighted Kaplan-Meier survival estimates for each group.
-- Provides log-rank and Cox model test results (including hazard ratios and p-values).
-- Estimates quantiles (e.g., median survival) and their confidence intervals.
-- Supports stratification and weighted analyses.
-- Performs internal checks for consistency and validity of KM curves and quantile calculations.
-
-**Typical Inputs:**
-- `df`: Data frame containing survival data.
-- `tte.name`: Name of the time-to-event column.
-- `event.name`: Name of the event indicator column (0/1).
-- `treat.name`: Name of the treatment group column (0/1).
-- `weight.name`: *(Optional)* Name of the weights column.
-- `strata.name`: *(Optional)* Name of the stratification column.
-- `arms`: Character vector of group labels.
-- Additional parameters for risk table intervals, quantile estimation, and statistical tests.
-
-**Typical Outputs:**
-- A list containing:
-  - Risk set sizes and event counts for each group and time point.
-  - Kaplan-Meier survival estimates and variances for each group.
-  - Log-rank and Cox model results (test statistics, p-values, hazard ratios).
-  - Quantile estimates (e.g., median survival) and confidence intervals.
-  - Indices and times for events and censoring.
-  - (If stratified) Results for each stratum.
-
-**Main Steps:**
-1. Validates and prepares input data.
-2. Computes risk sets and event counts for each group and time point.
-3. Calculates KM survival estimates and variances.
-4. Performs log-rank and Cox model tests.
-5. Estimates quantiles and confidence intervals.
-6. Checks for consistency in KM curves and quantile calculations.
-7. Returns a comprehensive list of results for downstream analysis and plotting.
-
-
-
-## Kaplan-Meier plots
-
-Creates Kaplan-Meier survival plots for two groups (e.g., treatment vs. control), allowing for the use of weights (such as inverse probability weights) in the estimation. The function can display survival curves, confidence intervals, risk tables, and optionally subgroup curves or additional annotations.
-
-```{r, echo = FALSE}
-library(DiagrammeR)
-# Define the flowchart in DOT syntax with horizontal layout
-flowchart <- grViz('digraph plot_weighted_km_flowchart {
-  node [shape = box, style = filled, fillcolor = "#e3e3e3"]
-  A [label = "Start: Call plot_weighted_km"]
-  B [label = "Input Validation & Preparation"]
-  C [label = "Compute Weighted KM Estimates for Group 0"]
-  D [label = "Compute Weighted KM Estimates for Group 1"]
-  E [label = "Extract Survival Curves and (Optional) Confidence Intervals"]
-  F [label = "Set Plot Limits and Axis Labels"]
-  G [label = "Plot Survival Curves for Both Groups"]
-  H [label = "Show Confidence Intervals?"]
-  I [label = "Add Confidence Interval Bands"]
-  J [label = "Skip Confidence Intervals"]
-  K [label = "Show Risk Table?"]
-  M [label = "Add Risk Table Below Plot"]
-  N [label = "Skip Risk Table"]
-  O [label = "Show Subgroup/Annotations?"]
-  Q [label = "Add Subgroup Curves or Annotations"]
-  R [label = "Skip Subgroup/Annotations"]
-  S [label = "Finalize Plot (Axes, Legends, etc.)"]
-  T [label = "Return Plot Object (optional)"]
-  U [label = "End"]
-
-  A -> B -> C -> D -> E -> F -> G -> H
-  H -> I [label = "Yes"]
-  H -> J [label = "No"]
-  I -> K
-  J -> K
-  K -> M [label = "Yes"]
-  K -> N [label = "No"]
-  M -> O
-  N -> O
-  O -> Q [label = "Yes"]
-  O -> R [label = "No"]
-  Q -> S
-  R -> S
-  S -> T -> U
-}
-', width = 800, height =800)
-flowchart
-```
-
-
-### plot_weighted_km
-
-This function calls `KM_plot_2sample_weighted_counting` described below.
-
-**Key Features:**
-- Plots weighted Kaplan-Meier survival curves for two groups.
-- Supports display of confidence intervals and risk tables.
-- Can handle weighted data (e.g., for marginal or adjusted survival).
-- Allows customization of plot appearance (colors, labels, axis limits, etc.).
-- May support subgroup overlays or additional plot annotations (depending on implementation).
-
-**Typical Inputs:**
-- `df`: Data frame containing survival data.
-- `tte.name`: Name of the time-to-event column.
-- `event.name`: Name of the event indicator column (0/1).
-- `treat.name`: Name of the treatment group column (0/1).
-- `weight.name`: *(Optional)* Name of the weights column.
-- Additional graphical and control parameters (e.g., colors, axis labels, risk table options).
-
-**Typical Outputs:**
-- A Kaplan-Meier plot with survival curves for each group, possibly with confidence intervals and risk tables.
-- (Optionally) Returns an object with survival estimates, time points, and other relevant results.
-
-**Main Steps:**
-1. Validates and prepares input data.
-2. Computes weighted Kaplan-Meier survival estimates for each group.
-3. Plots survival curves, confidence intervals, and risk tables.
-4. Adds optional annotations or subgroup curves if specified.
-
-
-## Summary of KM_plot_2sample_weighted_counting Function
-
-The `KM_plot_2sample_weighted_counting` function plots Kaplan-Meier survival curves for two groups (e.g., treatment and control) using weighted counting data, with options for displaying risk tables, legends, median survival, and statistical results (Cox model, log-rank test).
-
-**Key Features:**
-- Input validation for required data fields
-- Extraction of survival, censoring, and risk set data for both groups
-- Optional checks for valid KM curves
-- Plotting of KM curves with customizable appearance
-- Optional risk table below the plot
-- Legends for arms, Cox model, and log-rank test
-- Optional annotation of median survival
-- Extensive customization options
-
-**Parameters:**
-
-### `xmed.fraction` Parameter
-
-**Purpose:** Controls the horizontal position of the median survival annotation (or other quantile annotation) on the Kaplan-Meier plot.
-
-**How it works:**
-- Numeric value between 0 and 1.
-- Specifies the fraction of the x-axis (time axis) at which to place the median annotation text.
-    - `xmed.fraction = 0` places the annotation at the far left of the plot.
-    - `xmed.fraction = 1` places it at the far right.
-    - Typical value like `xmed.fraction = 0.80` places the annotation at 80% of the way from left to right.
-
-**Example:**
-If your time axis goes from 0 to 24 months and `xmed.fraction = 0.80`, the annotation will be placed at 19.2 months on the x-axis.
-
-**Usage in the function:**
-Allows fine-tuning of the median (or quantile) label position to avoid overlap with curves or other plot elements.
-
-- `dfcount`: List with all necessary data
-- `show.cox`, `show.logrank`: Show Cox/log-rank results
-- `show_arm_legend`: Show arm legend
-- `arms`: Names of the two groups
-- `put.legend.arms`, `put.legend.cox`, `put.legend.lr`: Legend positions
-- `col.0`, `col.1`: Colors for the two groups
-- `ltys`, `lwds`: Line types and widths
-- `show.med`: Show median survival annotation
-- ...and many more for fine-tuning
-
-**Workflow:**
-1. Validate input
-2. Extract data for both groups
-3. Check KM curves (optional)
-4. Plot KM curves
-5. Add risk table (optional)
-6. Add legends (arms, Cox, log-rank)
-7. Annotate median survival (optional)
-
-In summary, this function is a comprehensive tool for visualizing and annotating weighted Kaplan-Meier survival curves for two groups, with flexible options for statistical annotation and plot customization.
-
-
-
-## Kaplan-Meier difference analyses 
-
-Compares Kaplan-Meier survival curves between two groups (e.g., treatment vs. control) using time-to-event data. Calculates survival estimates, their differences, and provides both pointwise and simultaneous confidence intervals. Optionally, performs resampling for simultaneous confidence bands.
-
-
-```{r, echo = FALSE}
-library(DiagrammeR)
-# Create the flowchart using DiagrammeR's DOT language
-flowchart <- grViz('
-digraph KM_diff_flowchart {
-  node [shape = box, style = filled, fillcolor = "#e3e3e3"]
-  A [label = "Start: Call KM_diff"]
-  B [label = "Input Validation\n(Check columns, coding, NAs)"]
-  C [label = "Data Preparation\n(Order data, restrict time range)"]
-  D [label = "Estimate Survival for Group 1\n(KM curve & variance)"]
-  E [label = "Estimate Survival for Group 0\n(KM curve & variance)"]
-  F [label = "Compute Difference in Survival\n(dhat & variance)"]
-  G [label = "Calculate Pointwise CIs"]
-  H [label = "draws.band > 0?"]
-  I [label = "Resample Survival Curves\nfor Both Groups"]
-  J [label = "Compute Simultaneous Bands"]
-  K [label = "Return Results\n(Estimates, CIs, Bands, Resamples)"]
-  L [label = "End"]
-
-  A -> B -> C -> D -> E -> F -> G -> H
-  H -> I [label = "Yes"]
-  H -> K [label = "No"]
-  I -> J -> K -> L
-  K -> L
-}
-', width = 800, height =800)
-# Display the flowchart
-flowchart
-```
-
-### KM_estimates
-
-
-**Usage:**  
-```r
-KM_estimates(ybar, nbar, sig2w_multiplier = NULL)
-```
-
-**Arguments:**  
-- `ybar`: Vector of risk set sizes at each time point.
-- `nbar`: Vector of event counts at each time point.
-- `sig2w_multiplier`: Optional vector for variance calculation.
-
-**Value:**  
-A list with survival estimates (`S_KM`) and their variances (`sig2_KM`).
-
-### get_event_risk_matrices
-**Description:**  
-Constructs matrices indicating event and risk status for each subject at specified time points.
-
-**Usage:**  
-```r
-get_event_risk_matrices(U, at.points)
-```
-
-**Arguments:**  
-- `U`: Vector of observed times.
-- `at.points`: Vector of time points for evaluation.
-
-**Value:**  
-A list with event and risk matrices.
-
-### resampling_survival
-**Description:**  
-Performs resampling to generate survival curves for a group, used for constructing confidence bands.
-
-**Usage:**  
-```r
-resampling_survival(U, W, D, at.points, draws.band, surv, G_draws)
-```
-
-**Arguments:**  
-- `U`: Vector of observed times.
-- `W`: Vector of weights.
-- `D`: Vector of event indicators.
-- `at.points`: Time points for evaluation.
-- `draws.band`: Number of resampling draws.
-- `surv`: Survival estimates.
-- `G_draws`: Matrix of random draws.
-
-**Value:**  
-Matrix of resampled survival curves.
-
-### KM_diff
-**Description:**  
-Compares Kaplan-Meier survival curves between two groups (e.g., treatment vs. control) using time-to-event data. Calculates survival estimates, their differences, and provides both pointwise and simultaneous confidence intervals. Optionally, performs resampling for simultaneous confidence bands.
-
-**Usage:**  
-```r
-KM_diff(
-  df, tte.name, event.name, treat.name, weight.name = NULL,
-  at.points = sort(df[[tte.name]]), alpha = 0.05, seedstart = 8316951,
-  draws = 0, risk.points, draws.band = 0, tau.seq = 0.25, qtau = 0.025,
-  show_resamples = TRUE
-)
-```
-
-**Arguments:**  
-- See above for full list.
-
-**Value:**  
-A list containing survival estimates, variances, differences, pointwise and simultaneous confidence intervals, and (optionally) resampled curves.
-
-**Workflow Integration:**  
-- Use `get_event_risk_matrices` to construct event/risk matrices for your data.
-- Use `KM_estimates` to compute survival estimates and variances.
-- Use `resampling_survival` for confidence band resampling.
-- Use `KM_diff` to compare groups and summarize results.
-
-**Example Workflow:**
-```r
-# Prepare data
-event_risk <- get_event_risk_matrices(U = mydata$time, at.points = seq(0, max(mydata$time), by = 1))
-km_results <- KM_estimates(ybar = event_risk$risk_mat, nbar = event_risk$event_mat)
-resampled <- resampling_survival(U = mydata$time, W = rep(1, nrow(mydata)), D = mydata$status,
-                                 at.points = seq(0, max(mydata$time), by = 1), draws.band = 1000,
-                                 surv = km_results$S_KM, G_draws = matrix(rnorm(1000 * nrow(mydata)), ncol = 1000))
-km_diff_results <- KM_diff(df = mydata, tte.name = "time", event.name = "status", treat.name = "group",
-                           risk.points = seq(0, max(mydata$time), by = 1), draws.band = 1000)
-```
-
-
-
-
-## plotKM.band_subgroups
-
-**Description:**  
-Plots the difference in Kaplan-Meier survival curves between two groups (e.g., treatment vs. control), optionally including simultaneous confidence bands and subgroup curves. The function also displays risk tables for the overall population and specified subgroups.
-
-```{r, echo = FALSE}
-library(DiagrammeR)
-# Define the flowchart in DOT syntax
-flowchart <- grViz('digraph plotKM_band_subgroups_flowchart {
-  node [shape = box, style = filled, fillcolor = "#e3e3e3"]
-  A [label = "Start: Call plotKM.band_subgroups"]
-  B [label = "Input Checks & Argument Validation"]
-  C [label = "Determine Time Points and Risk Table Points"]
-  D [label = "Run KM_diff for ITT (overall population)"]
-  E [label = "Extract Survival Difference and Confidence Intervals"]
-  F [label = "Subgroups Specified?"]
-  G [label = "For Each Subgroup:\nSubset Data & Run KM_diff\nStore Results"]
-  H [label = "Skip Subgroup Analysis"]
-  I [label = "Prepare Subgroup Curves and Risk Tables"]
-  J [label = "Set Plot Limits and Axis Parameters"]
-  K [label = "Plot Main Difference Curve and Confidence Bands"]
-  L [label = "Subgroups?"]
-  M [label = "Plot Subgroup Curves"]
-  N [label = "Skip Subgroup Curves"]
-  O [label = "Add Risk Tables for ITT and Subgroups"]
-  P [label = "Finalize Plot (Axes, Legends, etc.)"]
-  Q [label = "Return Results (invisible list)"]
-  R [label = "End"]
-
-  A -> B -> C -> D -> E -> F
-  F -> G [label = "Yes"]
-  F -> H [label = "No"]
-  G -> I
-  H -> I
-  I -> J -> K -> L
-  L -> M [label = "Yes"]
-  L -> N [label = "No"]
-  M -> O
-  N -> O
-  O -> P -> Q -> R
-}
-', width = 800, height =800)
-# Display the flowchart
-flowchart
-```
-
-
-**Usage:**  
-```r
-plotKM.band_subgroups(
-  df, tte.name, event.name, treat.name, weight.name = NULL,
-  sg_labels = NULL, ltype = "s", lty = 1, draws = 20, lwd = 2,
-  sg_colors = NULL, color = "lightgrey", ymax.pad = 0.01, ymin.pad = -0.01,
-  taus = c(-Inf, Inf), yseq_length = 5, cex_Yaxis = 0.8, risk_cex = 0.8,
-  by.risk = 6, risk.add = NULL, xmax = NULL, ymin = NULL, ymax = NULL, ymin.del = 0.035,
-  y.risk1 = NULL, y.risk2 = NULL, ymin2 = NULL, risk_offset = NULL, risk.pad = 0.01,
-  risk_delta = 0.0275, tau_add = NULL, time.zero.pad = 0, time.zero.label = 0.0,
-  xlabel = NULL, ylabel = NULL, Maxtau = NULL, seedstart = 8316951,
-  ylim = NULL, draws.band = 20, qtau = 0.025, show_resamples = FALSE
-)
-```
-
-**Arguments:**  
-- `df`: Data frame containing survival data.
-- `tte.name`, `event.name`, `treat.name`, `weight.name`: Column names for time-to-event, event indicator, treatment group, and weights.
-- `sg_labels`: Character vector of subgroup definitions (as logical expressions).
-- `sg_colors`: Colors for subgroup curves.
-- `ltype`, `lty`, `lwd`: Line type, style, and width for curves.
-- `draws`, `draws.band`: Number of draws for resampling and simultaneous bands.
-- `color`: Color for confidence band polygon.
-- `ymax.pad`, `ymin.pad`, `ylim`, `ymin`, `ymax`: Plot y-axis padding and limits.
-- `risk_cex`, `cex_Yaxis`: Text size for risk table and axis.
-- `by.risk`, `risk.add`, `risk_delta`, `risk_offset`, `risk.pad`: Risk table settings.
-- `xlabel`, `ylabel`: Axis labels.
-- `Maxtau`, `tau_add`, `taus`: Time truncation settings.
-- `show_resamples`: Logical; whether to plot resampled curves.
-- ...and other graphical parameters.
-
-**Value:**  
-(Invisible) list containing:
-- `fit_itt`: KM_diff results for the full population.
-- `xpoints`: Time points used.
-- `Dhat_subgroups`: Difference curves for subgroups.
-- `s0_subgroups`, `s1_subgroups`: Survival curves for control and treatment in subgroups.
-- `rpoints`: Risk table time points.
-- `Risk_subgroups`: Risk table counts for subgroups.
-- `mean`, `lower`, `upper`: Main difference curve and confidence intervals.
-
-**Details:**  
-- Uses `KM_diff` to compute survival differences and confidence intervals.
-- Plots the main difference curve, confidence bands, and subgroup curves.
-- Displays risk tables for the overall population and subgroups.
-- Handles simultaneous confidence bands if `draws.band > 0`.
-
-**Example:**
-```r
-plotKM.band_subgroups(
-  df = mydata,
-  tte.name = "time",
-  event.name = "status",
-  treat.name = "group",
-  weight.name = "weights",
-  sg_labels = c("age > 65", "sex == 'F'"),
-  sg_colors = c("red", "blue"),
-  draws.band = 1000
-)
-```
-
-
-## wlr_dhat_estimates
-
-```{r, echo = FALSE}
-library(DiagrammeR)
-# Define the flowchart in DOT syntax with horizontal layout
-flowchart <- grViz('digraph wlr_dhat_estimates_flowchart {
-  node [shape = box, style = filled, fillcolor = "#e3e3e3"]
-  A [label = "Start: Call wlr_dhat_estimates"]
-  B [label = "Extract Data from dfcounting"]
-  C [label = "Find Index for tzero"]
-  D [label = "Compute dN and Risk Sets"]
-  E [label = "Compute/Extract Survival Curves"]
-  F [label = "Compute Weights using wt.rg.S"]
-  G [label = "Calculate Weighted Log-Rank Statistic (lr)"]
-  H [label = "Calculate Variance of Log-Rank (sig2_lr)"]
-  I [label = "Compute Survival Difference at tzero (dhat)"]
-  J [label = "Calculate Variance of dhat (sig2_dhat)"]
-  K [label = "Calculate Covariance and Correlation"]
-  L [label = "Return Results List"]
-  M [label = "End"]
-
-  A -> B -> C -> D -> E -> F -> G -> H -> I -> J -> K -> L -> M
-}
-', width = 800, height =800)
-# Display the flowchart
-flowchart
-```
-
-
-**Key Features:**
-- Calculates the weighted log-rank statistic and its variance.
-- Computes the difference in survival at a user-specified time (`tzero`).
-- Estimates the variance of the survival difference.
-- Computes the covariance and correlation between the log-rank statistic and the survival difference.
-- Supports multiple weighting schemes (Fleming-Harrington, Schemper, Xu & O'Quigley, Maggir-Burman, custom time-based, and custom codes) via the `scheme` argument.
-
-**Typical Inputs:**
-- `dfcounting`: List from `df_counting` containing risk sets, event counts, and survival estimates.
-- `rho`, `gamma`: Weighting parameters (for Fleming-Harrington and custom schemes).
-- `tzero`: Time point for evaluating the survival difference.
-- `scheme`: Weighting scheme (e.g., "fh", "schemper", "XO", "MB", "custom_time", "custom_code").
-- Additional arguments for specific schemes (e.g., `Scensor`, `Ybar`, `tpoints`, `t.tau`, `w0.tau`, `w1.tau`, `mb_tstar`).
-
-**Typical Outputs:**
-- A list containing:
-  - `lr`: Weighted log-rank test statistic.
-  - `sig2_lr`: Variance of the log-rank statistic.
-  - `dhat`: Difference in survival at `tzero`.
-  - `sig2_dhat`: Variance of the survival difference.
-  - `cov_wlr_dhat`: Covariance between log-rank and survival difference.
-  - `cor_wlr_dhat`: Correlation between log-rank and survival difference.
-
-**Main Steps:**
-1. Extracts risk sets, event counts, and survival estimates from `dfcounting`.
-2. Computes time-dependent weights using `wt.rg.S` according to the selected scheme.
-3. Calculates the log-rank statistic, survival difference at `tzero`, their variances, covariance, and correlation.
-4. Returns all results in a list for further analysis or reporting.
-
 

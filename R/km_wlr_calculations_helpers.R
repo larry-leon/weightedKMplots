@@ -499,7 +499,7 @@ KM_diff <- function(df, tte.name = "tte", event.name = "event", treat.name = "tr
 
   surv0_star <- surv1_star <- dhat_star <- NULL
   c_alpha_band <- sb_lower <- sb_upper <- NULL
-
+  Zdhat_star <- NULL
   if(draws.band > 0){
     # draws > 0
     set.seed(seedstart)

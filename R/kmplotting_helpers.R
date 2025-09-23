@@ -552,16 +552,17 @@ plotKM.band_subgroups <- function(
 
 
   }
-  if ((ymax - ymin2) <= 0.5) {
+
   d_minmax <- round((ymax-ymin)/10,2)
   by_ypoints <- min(c(d_minmax, 0.2))
+
+  if ((ymax - ymin2) <= 0.5) {
   ypoints <- sort(c(time.zero.label, seq(ymin,ymax, by = by_ypoints)))
   } else {
-    d_minmax <- round((ymax-ymin)/10,2)
-    by_ypoints <- min(c(d_minmax, 0.2))
-    ypoints <- seq(ymin, ymax, by = by_ypoints)
+  ypoints <- seq(ymin, ymax, by = by_ypoints)
   }
   ypoints <- sort(c(time.zero.label, ypoints))
+  ypoints <- format(round(ypoints,3), scientific = FALSE)
 
   axis(2, at = ypoints, cex.axis = cex_Yaxis, las = 1)
   risk.points.label <- as.character(c(time.zero.label, risk.points[-1]))
