@@ -117,100 +117,6 @@ km_quantile_table <- function(time_points, surv0, se0, surv1, se1, arms = c("tre
 }
 
 
-
-#' Weighted Log-Rank Test Statistic and Variance
-#'
-#' Computes the weighted log-rank test statistic and its variance for two groups, using flexible time-dependent weights.
-#' The weighting scheme is selected via the \code{scheme} argument and is calculated using \code{wt.rg.S}.
-#'
-#' @param ybar0 Numeric vector of risk set sizes for group 0.
-#' @param ybar1 Numeric vector of risk set sizes for group 1.
-#' @param nbar0 Numeric vector of event counts for group 0.
-#' @param nbar1 Numeric vector of event counts for group 1.
-#' @param S_pool Optional numeric vector of pooled survival probabilities (Kaplan-Meier). If NULL, calculated internally.
-#' @param rho Numeric weighting parameter (used for \"fh\" and \"custom_code\" schemes).
-#' @param gamma Numeric weighting parameter (used for \"fh\" and \"custom_code\" schemes).
-#' @param scheme Character string specifying weighting scheme. One of:
-#'   \"fh\" (Fleming-Harrington), \"schemper\", \"XO\", \"MB\", \"custom_time\", or \"custom_code\".
-#' @param Scensor Optional numeric vector of censoring probabilities (for \"schemper\" scheme).
-#' @param Ybar Optional numeric vector of risk set sizes (for \"XO\" scheme).
-#' @param tpoints Optional numeric vector of time points (for \"custom_time\" and \"MB\" schemes).
-#' @param t.tau Optional time cutoff for \"custom_time\" weights.
-#' @param w0.tau, w1.tau Weights before/after t.tau (for \"custom_time\" scheme).
-#' @param mb_tstar Optional time for MB weights.
-#'
-#' @return A list with elements:
-#'   \item{lr}{Weighted log-rank test statistic.}
-#'   \item{sig2}{Variance of the test statistic.}
-#'
-#' @details
-#' The weighting scheme is selected via the \code{scheme} argument and calculated using \code{wt.rg.S}.
-#' Supports standard Fleming-Harrington, Schemper, XO (Xu & O'Quigley), MB (Maggir-Burman), custom time-based, and custom code weights.
-#'
-#' @examples
-#' # Fleming-Harrington weights
-#' wlr_estimates(ybar0, ybar1, nbar0, nbar1, rho = 1, gamma = 1, scheme = \"fh\")
-#' # Schemper weights
-#' wlr_estimates(ybar0, ybar1, nbar0, nbar1, S_pool = S, Scensor = censor_S, scheme = \"schemper\")
-#' # XO weights
-#' wlr_estimates(ybar0, ybar1, nbar0, nbar1, S_pool = S, Ybar = risk_set, scheme = \"XO\")
-#' # MB weights
-#' wlr_estimates(ybar0, ybar1, nbar0, nbar1, S_pool = S, tpoints = times, mb_tstar = 12, scheme = \"MB\")
-#' # Custom time-based weights
-#' wlr_estimates(ybar0, ybar1, nbar0, nbar1, S_pool = S, tpoints = times, t.tau = 6, w0.tau = 0, w1.tau = 1, scheme = \"custom_time\")
-#'
-#' @export
-wlr_estimates <- function(dfwlr, scheme_params = list(rho = 0, gamma = 0.5), scheme = "fh") {
-
-    # Check for required columns
-    required_cols <- c("at_points", "nbar0", "nbar1", "ybar0", "ybar1", "survP")
-    missing_cols <- setdiff(required_cols, names(dfwlr))
-    if (length(missing_cols) > 0) {
-      stop("dfwlr is missing required columns: ", paste(missing_cols, collapse = ", "))
-    }
-
-  at_points <- dfwlr$at_points
-  nbar0 <- dfwlr$nbar0
-  nbar1 <- dfwlr$nbar1
-  ybar0 <- dfwlr$ybar0
-  ybar1 <- dfwlr$ybar1
-  S.pool <- dfwlr$survP
-
-  dN0 <- diff(c(0, nbar0))
-  dN1 <- diff(c(0, nbar1))
-  dN_pooled <- dN0 + dN1
-  risk_pooled <- ybar0 + ybar1
-  # Validate scheme and parameters
-  supported_schemes <- c("fh", "schemper", "XO", "MB", "custom_time", "fh_exp1", "fh_exp2")
-  if (!(scheme %in% supported_schemes)) {
-    stop("scheme must be one of: ", paste(supported_schemes, collapse = ", "))
-  }
-
-  if(scheme == "MB"){
-    if(is.null(scheme_params$mb_tstar)){
-      cat("Missing mb_tstar argument in scheme_params you have:", paste(names(scheme_params), collapse = ", "), "\n")
-    }
-    scheme_params <- list(mb_tstar = scheme_params$mb_tstar, tpoints = at_points)
-  }
-
-  validate_scheme_params(scheme, scheme_params, S.pool, tpoints = at_points)
-
-  # Calculate weights
-  wt_rg <- get_weights(scheme, scheme_params, S.pool, tpoints = at_points)
-
-  K <- ifelse(risk_pooled > 0, wt_rg * (ybar0 * ybar1) / risk_pooled, 0.0)
-  drisk0 <- sum(ifelse(ybar0 > 0, (K / ybar0) * dN0, 0.0))
-  drisk1 <- sum(ifelse(ybar1 > 0, (K / ybar1) * dN1, 0.0))
-  lr <- drisk0 - drisk1
-  h0 <- ifelse(ybar0 == 0, 0, (K^2 / ybar0))
-  h1 <- ifelse(ybar1 == 0, 0, (K^2 / ybar1))
-  dJ <- ifelse(risk_pooled == 1, 0, (dN_pooled - 1) / (risk_pooled - 1))
-  dL <- ifelse(risk_pooled == 0, 0, dN_pooled / risk_pooled)
-  sig2 <- sum((h0 + h1) * (1 - dJ) * dL)
-
-  list(lr = lr, sig2 = sig2)
-}
-
 #' Weighted Log-Rank and Difference Estimate at a Specified Time
 #'
 #' Computes the weighted log-rank statistic, its variance, the difference in survival at a specified time (`tzero`),
@@ -255,73 +161,82 @@ wlr_estimates <- function(dfwlr, scheme_params = list(rho = 0, gamma = 0.5), sch
 #' wlr_dhat_estimates(dfcounting, tpoints = times, t.tau = 6, w0.tau = 0, w1.tau = 1, scheme = \"custom_time\")
 #'
 #' @export
-wlr_dhat_estimates <- function(dfcounting, tzero = 24,
-                               scheme = "fh", scheme_params = list(rho = 0, gamma = 0)
+wlr_dhat_estimates <- function(dfcounting,
+                               scheme = "fh", scheme_params = list(rho = 0, gamma = 0), tzero = NULL
 ) {
+
+
+
+  # Check for required columns
+  required_cols <- c("at_points", "nbar0", "nbar1", "ybar0", "ybar1", "survP")
+  if(scheme == "schemper") requires_cols <- c(required_cols,"survG")
+  missing_cols <- setdiff(required_cols, names(dfcounting))
+  if (length(missing_cols) > 0) {
+    stop("df_weights is missing required columns: ", paste(missing_cols, collapse = ", "))
+  }
+
   at_points <- dfcounting$at_points
-  time <- dfcounting$time
   nbar0 <- dfcounting$nbar0
   nbar1 <- dfcounting$nbar1
   ybar0 <- dfcounting$ybar0
   ybar1 <- dfcounting$ybar1
+  S.pool <- dfcounting$survP
+  G.pool <- dfcounting$survG
+
+  # weights
+  dfwlr <- data.frame(at_points, S.pool, G.pool, Ybar = ybar0 + ybar1)
+
+  wt_rg <- get_validated_weights(dfwlr, scheme, scheme_params)
+
   S1 <- dfcounting$surv1
   S0 <- dfcounting$surv0
-  S.pool <- dfcounting$survP
-  loc_tzero <- which.max(at_points > tzero)
-  if (at_points[loc_tzero] <= tzero & at_points[loc_tzero + 1] > tzero) {
-    dhat_tzero <- S1[loc_tzero] - S0[loc_tzero]
-  } else {
-    dhat_tzero <- S1[loc_tzero - 1] - S0[loc_tzero - 1]
-  }
-  Sp_tzero <- S.pool[loc_tzero]
+
   dN0 <- diff(c(0, nbar0))
   dN1 <- diff(c(0, nbar1))
-  dN_pooled <- dN0 + dN1
-  risk_pooled <- ybar0 + ybar1
+  dN <- dN0 + dN1
+  ybar <- ybar0 + ybar1
 
-
-  # Validate scheme and parameters
-  supported_schemes <- c("fh", "schemper", "XO", "MB", "custom_time", "fh_exp1", "fh_exp2")
-  if (!(scheme %in% supported_schemes)) {
-    stop("scheme must be one of: ", paste(supported_schemes, collapse = ", "))
-  }
-
-  if(scheme == "MB"){
-    if(is.null(scheme_params$mb_tstar)){
-      cat("Missing mb_tstar argument in scheme_params you have:", paste(names(scheme_params), collapse = ", "), "\n")
+  if(!is.null(tzero)){
+    loc_tzero <- which.max(at_points > tzero)
+    if (at_points[loc_tzero] <= tzero & at_points[loc_tzero + 1] > tzero) {
+      dhat_tzero <- S1[loc_tzero] - S0[loc_tzero]
+    } else {
+      dhat_tzero <- S1[loc_tzero - 1] - S0[loc_tzero - 1]
     }
-    scheme_params <- list(mb_tstar = scheme_params$mb_tstar, tpoints = at_points)
+    Sp_tzero <- S.pool[loc_tzero]
   }
 
-
-  validate_scheme_params(scheme, scheme_params, S.pool, tpoints = at_points)
-
-  # Calculate weights
-  wt_rg <- get_weights(scheme, scheme_params, S.pool, tpoints = at_points)
-
-  K <- ifelse(risk_pooled > 0, wt_rg * (ybar0 * ybar1) / risk_pooled, 0.0)
+  K <- ifelse(ybar > 0, wt_rg * (ybar0 * ybar1) / ybar, 0.0)
   drisk0 <- sum(ifelse(ybar0 > 0, (K / ybar0) * dN0, 0.0))
   drisk1 <- sum(ifelse(ybar1 > 0, (K / ybar1) * dN1, 0.0))
   lr <- drisk0 - drisk1
   h0 <- ifelse(ybar0 == 0, 0, (K^2 / ybar0))
   h1 <- ifelse(ybar1 == 0, 0, (K^2 / ybar1))
-  dJ <- ifelse(risk_pooled == 1, 0, (dN_pooled - 1) / (risk_pooled - 1))
-  dL <- ifelse(risk_pooled == 0, 0, dN_pooled / risk_pooled)
+  dJ <- ifelse(ybar == 1, 0, (dN - 1) / (ybar - 1))
+  dL <- ifelse(ybar == 0, 0, dN / ybar)
   sig2_lr <- sum((h0 + h1) * (1 - dJ) * dL)
-  w_tzero <- wt_rg * ifelse(at_points <= tzero, 1, 0)
-  w_integral_t0 <- sum(w_tzero * (1 - dJ) * dL)
-  cov_wlr_dhat <- Sp_tzero * w_integral_t0
-  h2 <- ifelse(ybar0 * ybar1 > 0, (risk_pooled / (ybar0 * ybar1)), 0)
-  h2 <- h2 * ifelse(at_points <= tzero, 1, 0)
-  sig2_dhat <- (Sp_tzero^2) * sum(h2 * (1 - dJ) * dL)
-  # Correlation between log-rank statistic and dhat at time tzero
-  cor_wlr_dhat <- cov_wlr_dhat / (sqrt(sig2_lr) * sqrt(sig2_dhat))
-  list(
-    lr = lr, sig2_lr = sig2_lr, dhat = dhat_tzero,
-    cov_wlr_dhat = cov_wlr_dhat, sig2_dhat = sig2_dhat, cor_wlr_dhat = cor_wlr_dhat
-  )
-}
 
+  if(!is.null(tzero)){
+    w_tzero <- wt_rg * ifelse(at_points <= tzero, 1, 0)
+    w_integral_t0 <- sum(w_tzero * (1 - dJ) * dL)
+    cov_wlr_dhat <- Sp_tzero * w_integral_t0
+    h2 <- ifelse(ybar0 * ybar1 > 0, (ybar / (ybar0 * ybar1)), 0)
+    h2 <- h2 * ifelse(at_points <= tzero, 1, 0)
+    sig2_dhat <- (Sp_tzero^2) * sum(h2 * (1 - dJ) * dL)
+    # Correlation between log-rank statistic and dhat at time tzero
+    cor_wlr_dhat <- cov_wlr_dhat / (sqrt(sig2_lr) * sqrt(sig2_dhat))
+
+    ans <- list(
+      score = lr, sig2.score = sig2_lr, z.score = lr / sqrt(sig2_lr), dhat = dhat_tzero,
+      cov_wlr_dhat = cov_wlr_dhat, sig2_dhat = sig2_dhat, cor_wlr_dhat = cor_wlr_dhat
+    )
+  } else{
+    ans <- list(
+      score = lr, sig2.score  = sig2_lr, z.score = lr / sqrt(sig2_lr)
+    )
+  }
+  return(ans)
+}
 
 
 
@@ -547,10 +462,16 @@ KM_diff <- function(df, tte.name = "tte", event.name = "event", treat.name = "tr
 
 
 
-wlr_cumulative <- function(df_weights, scheme_params = list(rho = 0, gamma = 0.5), scheme = "fh", return_cumulative = FALSE) {
+wlr_cumulative <- function(df_weights, scheme, scheme_params = list(rho = 0, gamma = 0), return_cumulative = FALSE) {
 
-  # weights
-  wt_rg <- get_validated_weights(df_weights, scheme, scheme_params)
+
+# Check for required columns
+  required_cols <- c("at_points", "nbar0", "nbar1", "ybar0", "ybar1", "survP")
+  if(scheme == "schemper") requires_cols <- c(required_cols,"survG")
+  missing_cols <- setdiff(required_cols, names(df_weights))
+  if (length(missing_cols) > 0) {
+    stop("df_weights is missing required columns: ", paste(missing_cols, collapse = ", "))
+  }
 
   at_points <- df_weights$at_points
   nbar0 <- df_weights$nbar0
@@ -558,15 +479,17 @@ wlr_cumulative <- function(df_weights, scheme_params = list(rho = 0, gamma = 0.5
   ybar0 <- df_weights$ybar0
   ybar1 <- df_weights$ybar1
   S.pool <- df_weights$survP
+  G.pool <- df_weights$survG
+
+  # weights
+  dfwlr <- data.frame(at_points, S.pool, G.pool, Ybar = ybar0 + ybar1)
+  wt_rg <- get_validated_weights(dfwlr, scheme, scheme_params)
 
   dN0 <- diff(c(0, nbar0))
   dN1 <- diff(c(0, nbar1))
   dN <- dN0 + dN1
   ybar <- ybar0 + ybar1
-
-
   K <- ifelse(ybar > 0, wt_rg * (ybar0 * ybar1) / ybar, 0.0)
-
   h0 <- ifelse(ybar0 == 0, 0, (K^2 / ybar0))
   h1 <- ifelse(ybar1 == 0, 0, (K^2 / ybar1))
   dJ <- ifelse(ybar == 1, 0, (dN - 1) / (ybar - 1))
@@ -581,73 +504,6 @@ wlr_cumulative <- function(df_weights, scheme_params = list(rho = 0, gamma = 0.5
     drisk1 <- sum(ifelse(ybar1 > 0, (K / ybar1) * dN1, 0.0))
     sig2_lr <- sum((h0 + h1) * (1 - dJ) * dL)
   }
-
-  lr <- drisk0 - drisk1
-  z <- lr / sqrt(sig2_lr)
-  list(z.score = z, time = at_points, score = lr, sig2.score = sig2_lr)
-}
-
-
-
-
-wlr_cumulative_old <- function(dfwlr, scheme_params = list(rho = 0, gamma = 0.5), scheme = "fh", return_cumulative = FALSE) {
-
-  # Check for required columns
-  required_cols <- c("at_points", "nbar0", "nbar1", "ybar0", "ybar1", "survP")
-  missing_cols <- setdiff(required_cols, names(dfwlr))
-  if (length(missing_cols) > 0) {
-    stop("dfwlr is missing required columns: ", paste(missing_cols, collapse = ", "))
-  }
-
-  at_points <- dfwlr$at_points
-  nbar0 <- dfwlr$nbar0
-  nbar1 <- dfwlr$nbar1
-  ybar0 <- dfwlr$ybar0
-  ybar1 <- dfwlr$ybar1
-  S.pool <- dfwlr$survP
-
-
-  dN0 <- diff(c(0, nbar0))
-  dN1 <- diff(c(0, nbar1))
-  dN_pooled <- dN0 + dN1
-  risk_pooled <- ybar0 + ybar1
-
-
-  # Validate scheme and parameters
-  supported_schemes <- c("fh", "schemper", "XO", "MB", "custom_time", "fh_exp1", "fh_exp2")
-  if (!(scheme %in% supported_schemes)) {
-    stop("scheme must be one of: ", paste(supported_schemes, collapse = ", "))
-  }
-
-  if(scheme == "MB"){
-    if(is.null(scheme_params$mb_tstar)){
-      cat("Missing mb_tstar argument in scheme_params you have:", paste(names(scheme_params), collapse = ", "), "\n")
-    }
-    scheme_params <- list(mb_tstar = scheme_params$mb_tstar, tpoints = at_points)
-  }
-
-  validate_scheme_params(scheme, scheme_params, S.pool, tpoints = at_points)
-
-  # Calculate weights
-  wt_rg <- get_weights(scheme, scheme_params, S.pool, tpoints = at_points)
-
-  K <- ifelse(risk_pooled > 0, wt_rg * (ybar0 * ybar1) / risk_pooled, 0.0)
-
-  h0 <- ifelse(ybar0 == 0, 0, (K^2 / ybar0))
-  h1 <- ifelse(ybar1 == 0, 0, (K^2 / ybar1))
-  dJ <- ifelse(risk_pooled == 1, 0, (dN_pooled - 1) / (risk_pooled - 1))
-  dL <- ifelse(risk_pooled == 0, 0, dN_pooled / risk_pooled)
-
-  if(return_cumulative){
-    drisk0 <- cumsum(ifelse(ybar0 > 0, (K / ybar0) * dN0, 0.0))
-    drisk1 <- cumsum(ifelse(ybar1 > 0, (K / ybar1) * dN1, 0.0))
-    sig2_lr <- cumsum((h0 + h1) * (1 - dJ) * dL)
-  } else {
-    drisk0 <- sum(ifelse(ybar0 > 0, (K / ybar0) * dN0, 0.0))
-    drisk1 <- sum(ifelse(ybar1 > 0, (K / ybar1) * dN1, 0.0))
-    sig2_lr <- sum((h0 + h1) * (1 - dJ) * dL)
-  }
-
   lr <- drisk0 - drisk1
   z <- lr / sqrt(sig2_lr)
   list(z.score = z, time = at_points, score = lr, sig2.score = sig2_lr)

@@ -59,7 +59,7 @@ wt.rg.S <- function(
   }
 }
 
-validate_scheme_params <- function(scheme, scheme_params, S.pool, tpoints) {
+validate_scheme_params <- function(scheme, scheme_params, S.pool) {
   if (scheme == 'fh' && (is.null(scheme_params$rho) || is.null(scheme_params$gamma))) {
     stop('For Fleming-Harrington weights, specify both rho and gamma in scheme_params.')
   }
@@ -69,13 +69,14 @@ validate_scheme_params <- function(scheme, scheme_params, S.pool, tpoints) {
   if (scheme == 'XO' && (is.null(scheme_params$Ybar) || length(scheme_params$Ybar) != length(S.pool))) {
     stop('For XO weights, provide Ybar (risk set sizes) of same length as S in scheme_params.')
   }
-  if (scheme == 'MB' && (is.null(scheme_params$tpoints) || length(scheme_params$tpoints) != length(S.pool) || is.null(scheme_params$mb_tstar))) {
-    stop('For MB weights, provide tpoints (time points) of same length as S and mb_tstar (cutoff time) in scheme_params.')
+  if (scheme == 'MB' && is.null(scheme_params$mb_tstar)) {
+    stop('For MB weights, provide mb_tstar (cutoff time) in scheme_params.')
   }
   if (scheme == 'custom_time' && (is.null(scheme_params$t.tau) || is.null(scheme_params$w0.tau) || is.null(scheme_params$w1.tau))) {
     stop('For custom_time weights, provide tpoints (time points), t.tau (cutoff time), w0.tau, and w1.tau in scheme_params.')
   }
 }
+
 
 get_weights <- function(scheme, scheme_params, S.pool, tpoints) {
   if (scheme %in% c('MB', 'custom_time')) {
@@ -99,6 +100,61 @@ extract_and_calc_weights <- function(atpoints, S.pool, weights_spec_list) {
   rownames(df_all) <- NULL
   return(df_all)
 }
+
+
+#' Validate scheme/parameters and compute time-dependent weights
+#'
+#' This wrapper checks the scheme and parameters, then calls wt.rg.S to compute weights.
+#'
+#' @param scheme Character string specifying weighting scheme.
+#' @param scheme_params List of parameters for the scheme.
+#' @param S.pool Numeric vector of pooled survival probabilities.
+#' @param tpoints Numeric vector of time points.
+#' @param details Logical; if TRUE, return full details from wt.rg.S.
+#' @return Numeric vector of weights (or list if details=TRUE).
+#' @export
+get_validated_weights <- function(df_weights,
+    scheme = "fh",
+    scheme_params = list(rho = 0, gamma = 0),
+    details = FALSE
+) {
+  supported_schemes <- c("fh", "schemper", "XO", "MB", "custom_time", "fh_exp1", "fh_exp2")
+  if (!(scheme %in% supported_schemes)) {
+    stop("scheme must be one of: ", paste(supported_schemes, collapse = ", "))
+  }
+
+  # Check for required columns
+  required_cols <- c("at_points", "S.pool")
+  # For schemper weights also need the censoring distribution survG
+  if(scheme == "schemper") required_cols <- c(required_cols,"G.pool")
+  if(scheme == "XO") required_cols <- c(required_cols,"Ybar")
+  missing_cols <- setdiff(required_cols, names(df_weights))
+  if (length(missing_cols) > 0) {
+    stop("df_weights is missing required columns: ", paste(missing_cols, collapse = ", "))
+  }
+
+    at_points <- df_weights$at_points
+    S.pool <- df_weights$S.pool
+
+    if(scheme == "MB"){
+      if(is.null(scheme_params$mb_tstar)) cat("Missing mb_tstar argument in scheme_params you have:", paste(names(scheme_params), collapse = ", "), "\n")
+    }
+   if(scheme == "schemper") scheme_params <- list(Scensor = df_weights$G.pool)
+   if(scheme == "XO") scheme_params <- list(Ybar = df_weights$Ybar)
+
+  # Validate scheme and parameters
+  validate_scheme_params(scheme, scheme_params, S.pool)
+
+  # Prepare arguments for wt.rg.S
+  wt_args <- c(list(S = S.pool, scheme = scheme, tpoints = at_points, details = details), scheme_params)
+
+  # Call wt.rg.S
+  weights <- do.call(wt.rg.S, wt_args)
+
+  return(weights)
+}
+
+
 
 plot_weight_schemes <- function(
     dfcount,
@@ -130,14 +186,15 @@ plot_weight_schemes <- function(
       'FH(0.5,0.5)' = 1,
       'custom_time' = 1
     ),
-    transform_fh = TRUE,
-    rescheme_fhexp2 = FALSE,
+    transform_fh = FALSE,
+    rescheme_fhexp2 = TRUE,
     save_plot = FALSE,
     filename = 'weights_plot.png'
 ) {
   atpoints <- dfcount$at_points_all
   S.pool <- dfcount$survP_all
   ybar <- dfcount$ybar_all
+
   df_weights <- extract_and_calc_weights(atpoints, S.pool, weights_spec_list)
   if(!rescheme_fhexp2) df_weights$facet_group <- ifelse(df_weights$scheme == 'MB', 'MB', 'FH/FHexp2')
   if(rescheme_fhexp2) df_weights$facet_group <- ifelse(df_weights$scheme %in% c('MB','fh_exp2','custom_time'), 'MB/FHexp2/custom', 'FH')

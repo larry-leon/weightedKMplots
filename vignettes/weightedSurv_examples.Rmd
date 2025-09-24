@@ -102,6 +102,7 @@ Computes the weighted log-rank test statistic, its variance, the difference in s
 
 
 ```{r, message = FALSE}
+rm(list=ls())
 library(tinytex)
 library(survival)
 # to install weightedKMplots
@@ -111,15 +112,14 @@ library(weightedKMplots)
 
 # Updated 
 source('../R/kmplotting_helpers.R')
-source('../R/weightedCox_simulations_helpers.R')
-source('../R/weightedCox.R')
 source('../R/weighted_helpers_revised.R')
 source('../R/df_counting.R')
 source('../R/df_counting_helpers.R')
-source('../R/km_wlr_calculations_helpers.R')
-
+source('../R/km_wlr_calculations_helpers_revised.R')
 source('../R/rmst_calculations.R')
 
+source("../R/weightedCox_revised.R")
+source("../R/weightedCox_simulations_helpers_revised.R")
 
 #survminer is only used for 1 plot comparison
 #library(survminer)
@@ -144,14 +144,16 @@ arms <- c("treat", "control")
 
 GBSG - ITT Analysis
 ```{r}
+# Returns standard log-rank (FH(0,0) via scheme="fh" rho,gamma = 0 in scheme_params)
 dfcount_gbsg <- df_counting(df=df_gbsg, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, 
-                            by.risk = 12, scheme = "fh", scheme_params = list(rho = 0, gamma =0), lr.digits = 4, cox.digits =3)
+by.risk = 12, scheme = "fh", scheme_params = list(rho = 0, gamma =0), lr.digits = 4, cox.digits =3)
+```
 
-
-
-test <- df_counting(df=df_gbsg, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, 
-                            by.risk = 12, scheme = "XO",  lr.digits = 4, cox.digits =3)
-
+```{r, eval=FALSE}
+# MB weighting
+#test <- df_counting(df=df_gbsg, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, scheme = "MB", scheme_params = list(mb_tstar = 12))
+# 0/1 weighting (0 for time <= t.tau, 1 for time > t.tau)
+#test <- df_counting(df=df_gbsg, tte.name=tte.name, event.name=event.name, treat.name=treat.name, arms=arms, scheme = "custom_time", scheme_params = list(t.tau = 6, w0.tau = 0, w1.tau =1))
 ```
 
   
@@ -173,7 +175,8 @@ par(mfrow=c(1,2))
 # Set ymax a little above 1.0 to allow for logrank placement in topleft
 # topleft is default; xmed.fraction = 0.65 positions the display of the median estimates below the HR estimates ("topright" legend [default])
 # For details, please see summary of xmed.fraction in the Appendix below.
-plot_weighted_km(dfcount=dfcount_gbsg, conf.int=FALSE, show.logrank = TRUE, put.legend.lr = "topleft", ymax = 1.05, xmed.fraction = 0.65)
+plot_weighted_km(dfcount=dfcount_gbsg, conf.int=FALSE, show.logrank = TRUE, 
+                 put.legend.lr = "topleft", ymax = 1.05, xmed.fraction = 0.65)
 title(main="GBSG (trial) data un-weighted")
 # Compare with survfit
 plot_km(df=df_gbsg, tte.name=tte.name, event.name=event.name, treat.name=treat.name)
@@ -192,7 +195,9 @@ title(main="GBSG (trial) data un-weighted")
 
 
 ```{r, fig.width = 8, fig.height=6, eval=FALSE}
-km_fit <- survfit(Surv(time_months,status) ~ hormon, data=df_gbsg)
+# Optional, chunk NOT evaluated automatically (eval=FALSE)
+library(survminer)
+km_fit <- survfit(Surv(tte,event) ~ treat, data=df_gbsg)
 ggsurvplot(km_fit,conf.int=TRUE, risk.table = TRUE, break.time.by=12, xlim=c(0,86),
            tables.height = 0.2, tables.theme = theme_cleantable(), censor=TRUE, main = "GBSG (trial) data un-weighted")
 ```
@@ -315,7 +320,7 @@ get_bands <- cumulative_rmst_bands(df = df_rotterdam, fit = temp$fit_itt,
 tte.name = tte.name, event.name = event.name, treat.name = treat.name , weight.name = "sw.weights", 
 draws_sb = 1000, xlab="months", rmst_max_cex = 0.7)
 
-  legend("topleft", c("Cumulative RMST estimate", "95% pointwise CIs"),
+legend("topleft", c("Cumulative RMST estimate", "95% pointwise CIs"),
          lwd=c(2,1), col=c("black"), lty=c(1,2), bty="n", cex=0.7)
 
   
@@ -395,6 +400,77 @@ par(mfrow=c(1,2))
   
 ```
 
+# Weighted Cox Analysis with time-dependent, and subject-specific [ps weighting] weighting
+
+```{r}
+library(data.table)
+library(gt)
+
+dfcount <- dfcount_rotterdam_wtd
+
+get_rg <- cox_rhogamma(dfcount = dfcount, scheme = "fh", scheme_params = list(rho = 0, gamma = 0), draws = 1000, verbose = FALSE)
+# Note: with case-weights (here propensity-score weighting) recommend asymptotic versions of SEs
+res <- data.table()
+res$analysis <- "FH(0,0)"
+res$z <- get_rg$z.score
+res$hr <- get_rg$hr_ci_asy$hr
+res$lower <- get_rg$hr_ci_star$lower
+res$upper <- get_rg$hr_ci_star$upper
+# res$lower <- get_rg$hr_ci_asy$lower
+# res$upper <- get_rg$hr_ci_asy$upper
+# compare with coxph() 
+cat("Comparison with coxph with weighting, coxph:", dfcount$cox_results$cox_text, "\n")
+cat("Mine:", get_rg$cox_text_star, "\n")
+
+res_update <- res
+
+get_rg <- cox_rhogamma(dfcount = dfcount, scheme = "fh", scheme_params = list(rho = 0, gamma = 1), draws = 1000, verbose = FALSE)
+
+res <- data.table()
+res$analysis <- "FH(0,1)"
+res$hr <- get_rg$hr_ci_asy$hr
+res$lower <- get_rg$hr_ci_star$lower
+res$upper <- get_rg$hr_ci_star$upper
+res$z <- get_rg$z.score
+
+
+res_update <- rbind(res_update, res)
+get_rg <- cox_rhogamma(dfcount = dfcount, scheme = "fh_exp2", draws = 1000, verbose = FALSE)
+res <- data.table()
+res$analysis <- "FH_exp2"
+res$hr <- get_rg$hr_ci_asy$hr
+res$lower <- get_rg$hr_ci_star$lower
+res$upper <- get_rg$hr_ci_star$upper
+res$z <- get_rg$z.score
+
+res_update <- rbind(res_update, res)
+
+get_rg <- cox_rhogamma(dfcount = dfcount, scheme = "MB", scheme_params = list(mb_tstar = 12), draws = 1000, verbose = FALSE)
+res <- data.table()
+res$analysis <- "MB(12)"
+
+
+res$hr <- get_rg$hr_ci_asy$hr
+res$lower <- get_rg$hr_ci_star$lower
+res$upper <- get_rg$hr_ci_star$upper
+res$z <- get_rg$z.score
+res_update <- rbind(res_update, res)
+
+
+get_rg <- cox_rhogamma(dfcount = dfcount, scheme = "custom_time", scheme_params = list(t.tau = 6, w0.tau = 0, w1.tau = 1), draws = 1000, verbose = FALSE)
+res <- data.table()
+res$analysis <- "zero_one(6)"
+res$hr <- get_rg$hr_ci_asy$hr
+res$lower <- get_rg$hr_ci_star$lower
+res$upper <- get_rg$hr_ci_star$upper
+res$z <- get_rg$z.score
+res_update <- rbind(res_update, res)
+
+
+res_update %>% gt()  %>% fmt_number(decimals = 3) 
+
+```
+
 
 # Some checks on results
 
@@ -428,6 +504,8 @@ ps_model <- glm(hormon2 ~ age+meno+size+grade+nodes+pgr+chemo+er, data = df_rott
 iptw <- adjustedsurv(data=df_rotterdam, variable="hormon2", ev_time="time_months", event = "status", method = "iptw_km", treatment_model = ps_model, conf_int = TRUE)
 
 ```
+
+## Compare KM plots with adjustedCurves package
 
 ```{r, fig.width = 8, fig.height = 6}
 plot_weighted_km(dfcount=dfcount_rotterdam_wtd, conf.int = TRUE)
@@ -476,8 +554,10 @@ title(main = "Treat SEs")
 # (3) z_score_calculations function (from a Cox score-test perspective)
 check_results(dfcount_gbsg)
 # Check wlr_dhat_estimates which calculates from any scheme based on counting dataset 
-temp <- wlr_dhat_estimates(dfcounting = dfcount_gbsg, scheme_params = list(rho = 0, gamma = 0), scheme = "fh")
-with(temp,lr^2/sig2_lr)
+# In addition, calculates dhat's at tzero as well as correlation with log-rank
+temp <- wlr_dhat_estimates(dfcounting = dfcount_gbsg, scheme_params = list(rho = 0, gamma = 0), scheme = "fh", tzero = 12)
+temp$z.score^2
+
 ```
 
 
@@ -512,7 +592,9 @@ check_results(dfcount_mod)
 For modified data
 ```{r, fig.width = 10, fig.height=6}
 par(mfrow=c(1,2))
-plot_weighted_km(dfcount_mod)
+# Add some room above 1 (ymax = 1.05)
+# Align median results with HR estimates (xmed.fraction)
+plot_weighted_km(dfcount_mod, ymax = 1.05, xmed.fraction = 0.65)
 plot_km(df=df_mod, tte.name=tte.name, event.name=event.name, treat.name=treat.name)
 ```
 

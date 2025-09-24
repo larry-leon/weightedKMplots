@@ -141,6 +141,7 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
 
   at_points_all <- time
   ans$at_points_all <- at_points_all
+
   # Pooled KM estimates at all timepoints for input to cox estimation
   risk_event <- calculate_risk_event_counts(time, delta, wgt, at_points_all)
   ans$survP_all <- KM_estimates(ybar = risk_event$ybar, nbar = risk_event$nbar, sig2w_multiplier = risk_event$sig2w_multiplier)$S_KM
@@ -152,12 +153,15 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
   ans$survG_all <- KM_estimates(ybar = risk_event$ybar, nbar = risk_event$nbar, sig2w_multiplier = risk_event$sig2w_multiplier)$S_KM
   rm("risk_event")
 
+
+
   stratum <- unique(strata)
   risk.points <- sort(unique(c(seq(time.zero.label, max(time), by = ifelse(is.null(by.risk), 1, by.risk)), risk.add)))
   ans$risk.points <- risk.points
   ans$risk.points.label <- as.character(c(time.zero.label, risk.points[-1]))
 
   at_points <- sort(unique(c(time, time.zero, tpoints.add, risk.points)))
+
 
   # Treatment arm
   group_data <- extract_group_data(time, delta, wgt, z, group = 1)
@@ -214,17 +218,29 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
   sig2_survP <- temp$sig2_KM
   rm("temp")
 
-  dfwlr <- data.frame(at_points, nbar0, nbar1, ybar0, ybar1, surv1, surv0, survP)
+  # Pooled Censoring estimates
+  risk_event <- calculate_risk_event_counts(time, 1- delta, wgt, at_points)
+  temp <- KM_estimates(ybar = risk_event$ybar, nbar = risk_event$nbar, sig2w_multiplier = risk_event$sig2w_multiplier)
+  survG <- temp$S_KM
+  ans$survG <- survG
+  rm("temp")
 
-  get_lr <- wlr_estimates(dfwlr, scheme_params, scheme)
+  # data for weighting
+  df_weights <- data.frame(at_points, nbar0, nbar1, ybar0, ybar1, surv1, surv0, survP, survG)
 
-  get_score <- wlr_cumulative(dfwlr, scheme_params, scheme, return_cumulative = FALSE)
+  #get_lr <- wlr_dhat_estimates(dfwlr, scheme, scheme_params)
+
+  get_score <- wlr_cumulative(df_weights, scheme, scheme_params, return_cumulative = FALSE)
 
   z.score <- get_score$z.score
   ans$z.score <- z.score
   ans$get_score <- get_score
   pval <- 1 - pnorm(z.score)
   ans$zlogrank_text <- paste0("logrank (1-sided) p = ", format_pval(pval, eps = lr.eps, digits = lr.digits))
+
+  # Return lr and sig2_lr directly (duplicating "score" but for historical naming purposes also return as "lr")
+  ans$lr <- get_score$score
+  ans$sig2_lr <- get_score$sig2.score
 
   # KM curve checks
   if (check.KM) {
@@ -317,8 +333,7 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
     check_km_curve(at_points[idv1.check],surv1[idv1.check], sqrt(sig2_surv1[idv1.check]), df1_check, "treat", check.seKM = check.seKM)
   }
 
-  ans$lr <- get_lr$lr
-  ans$sig2_lr <- get_lr$sig2
+
   ans$at_points <- at_points
   ans$strata <- strata
   ans$ybar0 <- ybar0
@@ -384,18 +399,21 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
       survP_mat[, ss] <- temp$S_KM
       sig2_survP_mat[, ss] <- temp$sig2_KM
       S_pool <- temp$S_KM
+      # Censoring distribution
+      risk_event <- calculate_risk_event_counts(U_s, 1 - D_s, W_s, at_points, draws, seedstart)
+      temp <- KM_estimates(ybar = risk_event$ybar, nbar = risk_event$nbar, sig2w_multiplier = risk_event$sig2w_multiplier)
+      G_pool <- temp$S_KM
 
-      dfwlr <- data.frame(at_points, nbar0 = nbar0_s, nbar1 = nbar1_s, ybar0 = ybar0_s, ybar1 = ybar1_s, survP = S_pool)
-
-      get_score <- wlr_cumulative(dfwlr, scheme_params, scheme, return_cumulative = FALSE)
+      df_weights <- data.frame(at_points, nbar0 = nbar0_s, nbar1 = nbar1_s, ybar0 = ybar0_s, ybar1 = ybar1_s, survP = S_pool, survG = G_pool)
+      get_score <- wlr_cumulative(df_weights, scheme, scheme_params, return_cumulative = FALSE)
 
       score_stratified <- score_stratified + get_score$score
       sig2_score_stratified <- sig2_score_stratified + get_score$sig2.score
 
-      temp <- wlr_estimates(dfwlr, scheme_params, scheme)
+      # temp <- wlr_estimates(dfwlr, scheme_params, scheme)
 
-      lr_stratified <- lr_stratified + temp$lr
-      sig2_lr_stratified <- sig2_lr_stratified + temp$sig2
+      lr_stratified <- lr_stratified + get_score$score
+      sig2_lr_stratified <- sig2_lr_stratified + get_score$sig2.score
 
       rm("temp")
 
@@ -429,7 +447,7 @@ df_counting <- function(df, tte.name, event.name, treat.name, weight.name=NULL, 
 
   # Compare with survdiff for gamma=0 (survdiff only handles gamma=0)
   if(is.null(weight.name) && is.null(strata.name) && scheme == "fh" && scheme_params$gamma == 0){
-    z_lr <- with(get_lr,lr/sqrt(sig2))
+    z_lr <- get_score$z.score
     zsq_lr_check <- logrank_results$chisq
     if(round(z_lr^2 - zsq_lr_check,8)>0){
       warning("Discrepancy with log-rank and survdiff")
